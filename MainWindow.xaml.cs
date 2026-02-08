@@ -1490,11 +1490,35 @@ namespace PrivacyMonitor
             if (tab?.IsReady == true) tab.WebView.CoreWebView2.NavigateToString(WelcomeHtml);
         }
 
+        private const string SearchEngineUrl = "https://duckduckgo.com/?q=";
+
+        private static bool LooksLikeUrl(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return false;
+            var t = input.Trim();
+            if (t.Contains(' ')) return false;
+            if (t.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                t.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                t.StartsWith("file:", StringComparison.OrdinalIgnoreCase)) return true;
+            if (t.Contains("://")) return true;
+            if (t.Contains('.')) return true; // e.g. google.com, sub.domain.co.uk
+            return false;
+        }
+
         private void Navigate()
         {
             var tab = ActiveTab; if (tab == null || !tab.IsReady) return;
-            var url = AddressBar.Text.Trim(); if (string.IsNullOrEmpty(url)) return;
-            if (!url.Contains("://")) url = "https://" + url;
+            var input = AddressBar.Text.Trim(); if (string.IsNullOrEmpty(input)) return;
+
+            string url;
+            if (LooksLikeUrl(input))
+            {
+                url = input.Contains("://") ? input : "https://" + input;
+            }
+            else
+            {
+                url = SearchEngineUrl + Uri.EscapeDataString(input);
+            }
             try { tab.WebView.CoreWebView2.Navigate(url); } catch { }
         }
 
