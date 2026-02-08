@@ -269,13 +269,16 @@ namespace PrivacyMonitor
                 "PrivacyMonitor",
                 "WebView2");
 
-            // Prefer fixed runtime next to the app (for offline/portable use)
-            string fixedRuntimePath = Path.Combine(AppContext.BaseDirectory, "Microsoft.Web.WebView2.FixedVersionRuntime.win-x64");
+            // 1) Bundled fixed runtime (from WebView2.Runtime.X64 NuGet or folder next to exe) — works offline, no install
+            string baseDir = AppContext.BaseDirectory;
+            string bundledWebView2 = Path.Combine(baseDir, "WebView2");                    // NuGet package folder
+            string fixedRuntimePath = Path.Combine(baseDir, "Microsoft.Web.WebView2.FixedVersionRuntime.win-x64");
+            if (Directory.Exists(bundledWebView2))
+                return await CoreWebView2Environment.CreateAsync(bundledWebView2, userDataFolder);
             if (Directory.Exists(fixedRuntimePath))
                 return await CoreWebView2Environment.CreateAsync(fixedRuntimePath, userDataFolder);
 
-            // Fallback: use system WebView2 Runtime (installed with Edge or standalone)
-            // Requires WebView2 on the PC: https://developer.microsoft.com/microsoft-edge/webview2/
+            // 2) Fallback: system WebView2 (needs internet or pre-installed runtime)
             return await CoreWebView2Environment.CreateAsync(null, userDataFolder);
         }
 

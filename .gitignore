@@ -50,3 +50,7 @@ Desktop.ini
 
 # App data (optional: remove if you want to track default configs)
 # site-profiles.json, learned-trackers.json live in %AppData%\PrivacyMonitor
+
+# Website build artifacts (large; generate with publish.ps1)
+website/*.exe
+website/*.zip

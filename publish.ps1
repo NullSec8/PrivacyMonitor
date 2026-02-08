@@ -7,9 +7,9 @@ $winDir = Join-Path $publishDir 'win-x64'
 $websiteDir = Join-Path $root 'website'
 $assetsDir = Join-Path $websiteDir 'assets'
 
-# Get version from project
-$version = (Select-String -Path $projectPath -Pattern '<Version>([^<]+)</Version>').Matches.Groups[1].Value
-if (-not $version) { $version = '1.0.0' }
+# Get version from project (optional <Version> in csproj)
+$versionMatch = Select-String -Path $projectPath -Pattern '<Version>([^<]+)</Version>' | Select-Object -First 1
+$version = if ($versionMatch) { $versionMatch.Matches.Groups[1].Value } else { '1.0.0' }
 
 Write-Host "Publishing PrivacyMonitor v$version (win-x64, self-contained single-file)..."
 
@@ -49,16 +49,13 @@ BUILD: $(Get-Date -Format 'yyyy-MM-dd')
 
 QUICK START
 -----------
-1. Copy this folder (or just PrivacyMonitor.exe) to your PC.
+1. Copy this ENTIRE folder to your PC (the WebView2 folder must stay next to the exe).
 2. Double-click PrivacyMonitor.exe to run.
-   No installer needed. No .NET or extra software required for the app itself.
+   No installer, no .NET, no internet, no WebView2 install required — everything is bundled.
 
 REQUIREMENTS
 ------------
-- Windows 10 or 11 (64-bit)
-- WebView2 Runtime (usually already installed with Windows or Microsoft Edge).
-  If you see an error about WebView2 when starting the app, install it from:
-  https://go.microsoft.com/fwlink/p/?LinkId=2124703
+- Windows 10 or 11 (64-bit) only.
 
 FIRST RUN
 ---------
