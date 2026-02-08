@@ -260,20 +260,23 @@ namespace PrivacyMonitor
         // ================================================================
         //  TAB MANAGEMENT
         // ================================================================
+        private const string WebView2DownloadUrl = "https://developer.microsoft.com/microsoft-edge/webview2/#download-section";
+
         private static async Task<CoreWebView2Environment?> CreateWebView2EnvironmentAsync()
         {
-            string fixedRuntimePath = Path.Combine(AppContext.BaseDirectory, "Microsoft.Web.WebView2.FixedVersionRuntime.win-x64");
-            if (!Directory.Exists(fixedRuntimePath))
-            {
-                return null;
-            }
-
             string userDataFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "PrivacyMonitor",
                 "WebView2");
 
-            return await CoreWebView2Environment.CreateAsync(fixedRuntimePath, userDataFolder);
+            // Prefer fixed runtime next to the app (for offline/portable use)
+            string fixedRuntimePath = Path.Combine(AppContext.BaseDirectory, "Microsoft.Web.WebView2.FixedVersionRuntime.win-x64");
+            if (Directory.Exists(fixedRuntimePath))
+                return await CoreWebView2Environment.CreateAsync(fixedRuntimePath, userDataFolder);
+
+            // Fallback: use system WebView2 Runtime (installed with Edge or standalone)
+            // Requires WebView2 on the PC: https://developer.microsoft.com/microsoft-edge/webview2/
+            return await CoreWebView2Environment.CreateAsync(null, userDataFolder);
         }
 
         private async Task CreateNewTab(string url = "about:welcome")
@@ -308,7 +311,9 @@ namespace PrivacyMonitor
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"WebView2 init failed:\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                string message = $"WebView2 failed to start.\n\n{ex.Message}\n\n" +
+                    "Privacy Monitor needs the WebView2 Runtime. Install it from:\n" + WebView2DownloadUrl;
+                MessageBox.Show(message, "Privacy Monitor - WebView2 Required", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
             SwitchToTab(tab.Id);
