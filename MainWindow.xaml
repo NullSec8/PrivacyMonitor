@@ -169,7 +169,7 @@
                                          GotFocus="AddressBar_GotFocus" LostFocus="AddressBar_LostFocus"/>
                             </DockPanel>
                             <TextBlock x:Name="AddressBarPlaceholder" IsHitTestVisible="False" VerticalAlignment="Center" Margin="26,0,0,0"
-                                       Text="Search or type a URL" FontSize="13" Foreground="#9AA0A6" FontFamily="Segoe UI"/>
+                                       Text="Search (DuckDuckGo) or type a URL" FontSize="13" Foreground="#9AA0A6" FontFamily="Segoe UI"/>
                         </Grid>
                     </Border>
                     <!-- Address suggestions (visual scaffold) -->

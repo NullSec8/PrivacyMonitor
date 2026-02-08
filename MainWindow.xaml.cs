@@ -262,6 +262,35 @@ namespace PrivacyMonitor
         // ================================================================
         private const string WebView2DownloadUrl = "https://developer.microsoft.com/microsoft-edge/webview2/#download-section";
 
+        /// <summary>Directory containing the running .exe (so we find WebView2 folder next to it when single-file published).</summary>
+        private static string GetExeDirectory()
+        {
+            try
+            {
+                string? path = Environment.ProcessPath;
+                if (!string.IsNullOrEmpty(path))
+                {
+                    string? dir = Path.GetDirectoryName(path);
+                    if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                        return dir;
+                }
+            }
+            catch { }
+            try
+            {
+                using var process = System.Diagnostics.Process.GetCurrentProcess();
+                string? path = process.MainModule?.FileName;
+                if (!string.IsNullOrEmpty(path))
+                {
+                    string? dir = Path.GetDirectoryName(path);
+                    if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                        return dir;
+                }
+            }
+            catch { }
+            return AppContext.BaseDirectory;
+        }
+
         private static async Task<CoreWebView2Environment?> CreateWebView2EnvironmentAsync()
         {
             string userDataFolder = Path.Combine(
@@ -269,14 +298,19 @@ namespace PrivacyMonitor
                 "PrivacyMonitor",
                 "WebView2");
 
-            // 1) Bundled fixed runtime (from WebView2.Runtime.X64 NuGet or folder next to exe) — works offline, no install
+            // 1) Bundled fixed runtime: look next to the .exe first (single-file publish), then BaseDirectory (build/IDE)
+            string exeDir = GetExeDirectory();
             string baseDir = AppContext.BaseDirectory;
-            string bundledWebView2 = Path.Combine(baseDir, "WebView2");                    // NuGet package folder
-            string fixedRuntimePath = Path.Combine(baseDir, "Microsoft.Web.WebView2.FixedVersionRuntime.win-x64");
-            if (Directory.Exists(bundledWebView2))
-                return await CoreWebView2Environment.CreateAsync(bundledWebView2, userDataFolder);
-            if (Directory.Exists(fixedRuntimePath))
-                return await CoreWebView2Environment.CreateAsync(fixedRuntimePath, userDataFolder);
+            foreach (string dir in new[] { exeDir, baseDir })
+            {
+                if (string.IsNullOrEmpty(dir)) continue;
+                string bundledWebView2 = Path.Combine(dir, "WebView2");
+                string fixedRuntimePath = Path.Combine(dir, "Microsoft.Web.WebView2.FixedVersionRuntime.win-x64");
+                if (Directory.Exists(bundledWebView2))
+                    return await CoreWebView2Environment.CreateAsync(bundledWebView2, userDataFolder);
+                if (Directory.Exists(fixedRuntimePath))
+                    return await CoreWebView2Environment.CreateAsync(fixedRuntimePath, userDataFolder);
+            }
 
             // 2) Fallback: system WebView2 (needs internet or pre-installed runtime)
             return await CoreWebView2Environment.CreateAsync(null, userDataFolder);
