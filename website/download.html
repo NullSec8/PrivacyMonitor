@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download - Privacy Monitor</title>
+  <meta name="description" content="Download Privacy Monitor for Windows 10/11. Single-file executable, no installer. Ready for any PC.">
+  <link rel="icon" href="assets/logo.png">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <div class="brand">
+        <img src="assets/logo.png" alt="Privacy Monitor" class="brand-img" onerror="this.style.display='none'">
+        <span>Privacy Monitor</span>
+      </div>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="features.html">Features</a>
+        <a href="download.html">Download</a>
+        <a href="security.html">Security & Privacy</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="section download-section">
+    <div class="container">
+      <h1>Download for Windows</h1>
+      <p class="section-desc">Single-file app. No installer. Works on any Windows 10/11 (64-bit) PC.</p>
+
+      <div class="download-cards">
+        <div class="download-card primary">
+          <h3>PrivacyMonitor.exe</h3>
+          <p>Direct executable. Double-click to run.</p>
+          <p class="meta" id="exe-meta">—</p>
+          <a class="cta cta-large" href="PrivacyMonitor.exe" download="PrivacyMonitor.exe">Download EXE</a>
+        </div>
+        <div class="download-card">
+          <h3>ZIP package</h3>
+          <p>EXE + INSTALL.txt for sharing or offline install.</p>
+          <p class="meta" id="zip-meta">—</p>
+          <a class="cta cta-secondary" href="#" id="zip-link" style="display:none;">Download ZIP</a>
+          <span id="zip-unavailable" class="muted small">Run <code>publish.ps1</code> to generate.</span>
+        </div>
+      </div>
+
+      <div class="install-steps card-panel">
+        <h3>Install on any PC</h3>
+        <ol class="steps-list">
+          <li><strong>Download</strong> PrivacyMonitor.exe (or the ZIP) to your computer.</li>
+          <li><strong>Run</strong> PrivacyMonitor.exe. No installer — just double-click. First start may take a few seconds.</li>
+          <li>If you see a message about <strong>WebView2</strong>, install the runtime once (many PCs already have it):<br>
+            <a href="https://go.microsoft.com/fwlink/p/?LinkId=2124703" target="_blank" rel="noopener">Download WebView2 Runtime (Microsoft)</a>
+          </li>
+        </ol>
+        <p class="muted small">Your settings are stored under <code>%LocalAppData%\PrivacyMonitor</code>. The app does not send data to any server.</p>
+      </div>
+
+      <div class="install-steps card-panel">
+        <h3>System requirements</h3>
+        <ul class="steps-list">
+          <li>Windows 10 or 11 (64-bit)</li>
+          <li>WebView2 Runtime (usually pre-installed with Windows or Edge)</li>
+          <li>No .NET or other frameworks required — the EXE is self-contained</li>
+        </ul>
+      </div>
+
+      <div class="install-steps card-panel verify-panel">
+        <h3>Verify download (optional)</h3>
+        <p class="muted small">After downloading, you can check the file hash to ensure it wasn’t modified.</p>
+        <p><strong>SHA256:</strong></p>
+        <div class="code" id="sha256-value">Run publish.ps1 to generate build info.</div>
+        <p class="muted small" style="margin-top:8px;">In PowerShell: <code>Get-FileHash .\PrivacyMonitor.exe -Algorithm SHA256</code></p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-links">
+        <a href="features.html">Features</a>
+        <a href="security.html">Security & Privacy</a>
+      </div>
+      <div>© 2026 Privacy Monitor</div>
+    </div>
+  </footer>
+
+  <script>
+    (function() {
+      fetch('assets/build-info.json')
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(info) {
+          if (!info) return;
+          if (info.version) {
+            document.getElementById('exe-meta').textContent = 'Version ' + info.version + (info.sizeMB ? ' · ' + info.sizeMB + ' MB' : '');
+          }
+          if (info.sha256) {
+            document.getElementById('sha256-value').textContent = info.sha256;
+          }
+          if (info.zipName) {
+            var zipLink = document.getElementById('zip-link');
+            zipLink.href = info.zipName;
+            zipLink.download = info.zipName;
+            zipLink.style.display = 'inline-flex';
+            document.getElementById('zip-unavailable').style.display = 'none';
+            document.getElementById('zip-meta').textContent = info.zipName + (info.zipSizeMB ? ' · ' + info.zipSizeMB + ' MB' : '');
+          }
+        })
+        .catch(function() {});
+    })();
+  </script>
+</body>
+</html>
