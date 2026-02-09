@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -278,7 +280,7 @@ namespace PrivacyMonitor
             catch { }
             try
             {
-                using var process = System.Diagnostics.Process.GetCurrentProcess();
+                var process = System.Diagnostics.Process.GetCurrentProcess();
                 string? path = process.MainModule?.FileName;
                 if (!string.IsNullOrEmpty(path))
                 {
@@ -298,22 +300,93 @@ namespace PrivacyMonitor
                 "PrivacyMonitor",
                 "WebView2");
 
-            // 1) Bundled fixed runtime: look next to the .exe first (single-file publish), then BaseDirectory (build/IDE)
+            // 1) Try bundled fixed runtime: exe dir, then BaseDirectory, then current directory
             string exeDir = GetExeDirectory();
             string baseDir = AppContext.BaseDirectory;
-            foreach (string dir in new[] { exeDir, baseDir })
+            string currentDir = Directory.GetCurrentDirectory();
+            foreach (string dir in new[] { exeDir, baseDir, currentDir })
             {
                 if (string.IsNullOrEmpty(dir)) continue;
                 string bundledWebView2 = Path.Combine(dir, "WebView2");
                 string fixedRuntimePath = Path.Combine(dir, "Microsoft.Web.WebView2.FixedVersionRuntime.win-x64");
                 if (Directory.Exists(bundledWebView2))
-                    return await CoreWebView2Environment.CreateAsync(bundledWebView2, userDataFolder);
+                {
+                    try
+                    {
+                        return await CoreWebView2Environment.CreateAsync(bundledWebView2, userDataFolder);
+                    }
+                    catch
+                    {
+                        break; // fall through to system WebView2
+                    }
+                }
                 if (Directory.Exists(fixedRuntimePath))
-                    return await CoreWebView2Environment.CreateAsync(fixedRuntimePath, userDataFolder);
+                {
+                    try
+                    {
+                        return await CoreWebView2Environment.CreateAsync(fixedRuntimePath, userDataFolder);
+                    }
+                    catch
+                    {
+                        break;
+                    }
+                }
             }
 
-            // 2) Fallback: system WebView2 (needs internet or pre-installed runtime)
+            // 3) Try embedded WebView2 (extract from exe to LocalAppData on first run — single exe for any PC)
+            string? extractedPath = await TryExtractEmbeddedWebView2Async();
+            if (!string.IsNullOrEmpty(extractedPath))
+            {
+                try
+                {
+                    return await CoreWebView2Environment.CreateAsync(extractedPath, userDataFolder);
+                }
+                catch { }
+            }
+
+            // 4) Fallback: system WebView2 (Evergreen - installed with Edge or standalone)
             return await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+        }
+
+        private static async Task<string?> TryExtractEmbeddedWebView2Async()
+        {
+            string extractRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "PrivacyMonitor", "WebView2Runtime");
+            string webView2Path = Path.Combine(extractRoot, "WebView2");
+            if (Directory.Exists(webView2Path))
+            {
+                string exePath = Path.Combine(webView2Path, "msedgewebview2.exe");
+                if (File.Exists(exePath)) return webView2Path;
+            }
+
+            Stream? zipStream = null;
+            foreach (string name in Assembly.GetExecutingAssembly().GetManifestResourceNames())
+            {
+                if (name.EndsWith("WebView2Runtime.zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    zipStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name);
+                    break;
+                }
+            }
+            if (zipStream == null) return null;
+
+            try
+            {
+                await Task.Run(() =>
+                {
+                    if (Directory.Exists(extractRoot)) Directory.Delete(extractRoot, true);
+                    Directory.CreateDirectory(extractRoot);
+                    using (var zip = new ZipArchive(zipStream, ZipArchiveMode.Read, leaveOpen: false))
+                    {
+                        zip.ExtractToDirectory(extractRoot);
+                    }
+                }).ConfigureAwait(false);
+                if (File.Exists(Path.Combine(webView2Path, "msedgewebview2.exe")))
+                    return webView2Path;
+            }
+            catch { }
+            return null;
         }
 
         private async Task CreateNewTab(string url = "about:welcome")

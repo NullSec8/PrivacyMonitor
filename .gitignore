@@ -54,3 +54,6 @@ Desktop.ini
 # Website build artifacts (large; generate with publish.ps1)
 website/*.exe
 website/*.zip
+
+# Embedded WebView2 zip (created by publish.ps1, not for git)
+WebView2Runtime.zip

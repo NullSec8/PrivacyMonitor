@@ -13,9 +13,9 @@ $version = if ($versionMatch) { $versionMatch.Matches.Groups[1].Value } else { '
 
 Write-Host "Publishing PrivacyMonitor v$version (win-x64, self-contained single-file)..."
 
-if (Test-Path $winDir) { Remove-Item $winDir -Recurse -Force }
-New-Item -ItemType Directory -Path $winDir -Force | Out-Null
+if (-not (Test-Path $winDir)) { New-Item -ItemType Directory -Path $winDir -Force | Out-Null }
 
+# First publish: get exe + WebView2 folder (overwrites existing)
 dotnet publish $projectPath -c Release -r win-x64 -o $winDir `
   -p:SelfContained=true `
   -p:PublishSingleFile=true `
@@ -26,6 +26,23 @@ dotnet publish $projectPath -c Release -r win-x64 -o $winDir `
 $exePath = Join-Path $winDir 'PrivacyMonitor.exe'
 if (-not (Test-Path $exePath)) {
   Write-Error "Publish did not produce PrivacyMonitor.exe in $winDir"
+}
+
+# Embed WebView2 in exe so one exe works on any PC (extract on first run)
+$webView2Folder = Join-Path $winDir 'WebView2'
+$runtimeZip = Join-Path $root 'WebView2Runtime.zip'
+if (Test-Path $webView2Folder) {
+  Write-Host "Creating WebView2Runtime.zip for single-exe embedding..."
+  if (Test-Path $runtimeZip) { Remove-Item $runtimeZip -Force }
+  Compress-Archive -Path $webView2Folder -DestinationPath $runtimeZip -CompressionLevel Optimal -Force
+  Write-Host "Re-publishing with embedded WebView2 (one exe for any PC)..."
+  dotnet publish $projectPath -c Release -r win-x64 -o $winDir `
+    -p:SelfContained=true `
+    -p:PublishSingleFile=true `
+    -p:EnableCompressionInSingleFile=true `
+    -p:PublishReadyToRun=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true
+  Remove-Item $runtimeZip -Force -ErrorAction SilentlyContinue
 }
 
 # Copy exe to website for direct download
@@ -49,9 +66,9 @@ BUILD: $(Get-Date -Format 'yyyy-MM-dd')
 
 QUICK START
 -----------
-1. Copy this ENTIRE folder to your PC (the WebView2 folder must stay next to the exe).
+1. Download PrivacyMonitor.exe (or this whole folder).
 2. Double-click PrivacyMonitor.exe to run.
-   No installer, no .NET, no internet, no WebView2 install required — everything is bundled.
+   One exe — no installer, no .NET, no WebView2 install. Works on any Windows 10/11 (64-bit) PC.
 
 REQUIREMENTS
 ------------
@@ -59,7 +76,8 @@ REQUIREMENTS
 
 FIRST RUN
 ---------
-- The first start may take a few seconds (single-file unpacking).
+- If you only have the exe: first run may take 20–40 seconds (one-time setup), then the app opens.
+- Later runs start normally.
 - Your settings and per-site protection choices are stored under:
   %LocalAppData%\PrivacyMonitor
 
