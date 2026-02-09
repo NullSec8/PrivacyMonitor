@@ -123,11 +123,11 @@ namespace PrivacyMonitor
                 };
             }
 
-            // 3) Known tracker detection (confidence-weighted)
+            // 3) Known tracker detection (confidence-weighted) — BlockKnown at 0.70 for stronger blocking
             double trackerConfidence = MaxSignalConfidence(entry.Signals, "known_tracker", "heuristic_tracker");
             if (blockAdsTrackers && !string.IsNullOrEmpty(entry.TrackerLabel))
             {
-                if (mode == ProtectionMode.BlockKnown && trackerConfidence >= 0.80)
+                if (mode == ProtectionMode.BlockKnown && trackerConfidence >= 0.70)
                 {
                     return new BlockDecision
                     {
@@ -139,7 +139,7 @@ namespace PrivacyMonitor
                     };
                 }
 
-                if (mode == ProtectionMode.Aggressive && trackerConfidence >= 0.50)
+                if (mode == ProtectionMode.Aggressive && trackerConfidence >= 0.45)
                 {
                     return new BlockDecision
                     {
@@ -195,6 +195,22 @@ namespace PrivacyMonitor
                         Category = heuristic.SignalType == "js_injection" ? "Behavioral" : "Tracking",
                         Confidence = heuristic.Confidence,
                         TrackerLabel = "Heuristic Detection"
+                    };
+                }
+            }
+
+            // 6) Aggressive path-based blocking: third-party URLs with ad/tracker path patterns
+            if (mode == ProtectionMode.Aggressive && blockAdsTrackers && !isMedia)
+            {
+                if (IsAdOrTrackerPath(entry.Path) || IsAdOrTrackerPath(entry.FullUrl))
+                {
+                    return new BlockDecision
+                    {
+                        Blocked = true,
+                        Reason = "Ad/tracker path pattern",
+                        Category = "Tracking",
+                        Confidence = 0.75,
+                        TrackerLabel = "Path heuristic"
                     };
                 }
             }
@@ -363,36 +379,146 @@ namespace PrivacyMonitor
 
         private static List<BlocklistEntry> GetDefaultBlocklistEntries() => new()
         {
+            // Google / Alphabet
             new BlocklistEntry { Domain = "doubleclick.net", Label = "Google DoubleClick", Category = "Ad" },
             new BlocklistEntry { Domain = "googlesyndication.com", Label = "Google AdSense", Category = "Ad" },
+            new BlocklistEntry { Domain = "pagead2.googlesyndication.com", Label = "Google Ads", Category = "Ad" },
             new BlocklistEntry { Domain = "googleadservices.com", Label = "Google Ads", Category = "Ad" },
             new BlocklistEntry { Domain = "adservice.google.com", Label = "Google Ad Service", Category = "Ad" },
-            new BlocklistEntry { Domain = "pagead2.googlesyndication.com", Label = "Google Ads", Category = "Ad" },
+            new BlocklistEntry { Domain = "google-analytics.com", Label = "Google Analytics", Category = "Tracking" },
+            new BlocklistEntry { Domain = "googletagmanager.com", Label = "Google Tag Manager", Category = "Tracking" },
+            new BlocklistEntry { Domain = "googletagservices.com", Label = "Google Tag Services", Category = "Tracking" },
+            new BlocklistEntry { Domain = "googleoptimize.com", Label = "Google Optimize", Category = "Tracking" },
+            new BlocklistEntry { Domain = "app-measurement.com", Label = "Firebase Analytics", Category = "Tracking" },
+            new BlocklistEntry { Domain = "firebaseinstallations.googleapis.com", Label = "Firebase", Category = "Tracking" },
+            new BlocklistEntry { Domain = "firebaselogging.googleapis.com", Label = "Firebase Logging", Category = "Tracking" },
+            // Meta / Facebook
+            new BlocklistEntry { Domain = "facebook.net", Label = "Facebook SDK", Category = "Tracking" },
+            new BlocklistEntry { Domain = "connect.facebook.net", Label = "Facebook Connect", Category = "Tracking" },
+            new BlocklistEntry { Domain = "pixel.facebook.com", Label = "Facebook Pixel", Category = "Ad" },
+            new BlocklistEntry { Domain = "an.facebook.com", Label = "Facebook Audience Network", Category = "Ad" },
+            new BlocklistEntry { Domain = "graph.facebook.com", Label = "Facebook Graph API", Category = "Tracking" },
+            // Microsoft
+            new BlocklistEntry { Domain = "clarity.ms", Label = "Microsoft Clarity", Category = "Tracking" },
+            new BlocklistEntry { Domain = "bat.bing.com", Label = "Bing UET", Category = "Ad" },
+            new BlocklistEntry { Domain = "c.bing.com", Label = "Bing Tracking", Category = "Tracking" },
+            // Twitter / X, TikTok, LinkedIn
             new BlocklistEntry { Domain = "ads-twitter.com", Label = "Twitter Ads", Category = "Ad" },
             new BlocklistEntry { Domain = "static.ads-twitter.com", Label = "Twitter Ads SDK", Category = "Ad" },
+            new BlocklistEntry { Domain = "analytics.tiktok.com", Label = "TikTok Analytics", Category = "Tracking" },
+            new BlocklistEntry { Domain = "analytics-sg.tiktok.com", Label = "TikTok Analytics", Category = "Tracking" },
+            new BlocklistEntry { Domain = "mon.tiktokv.com", Label = "TikTok Monitoring", Category = "Tracking" },
             new BlocklistEntry { Domain = "ads.linkedin.com", Label = "LinkedIn Ads", Category = "Ad" },
             new BlocklistEntry { Domain = "px.ads.linkedin.com", Label = "LinkedIn Conversion", Category = "Ad" },
-            new BlocklistEntry { Domain = "analytics.tiktok.com", Label = "TikTok Analytics", Category = "Tracking" },
-            new BlocklistEntry { Domain = "mon.tiktokv.com", Label = "TikTok Monitoring", Category = "Tracking" },
-            new BlocklistEntry { Domain = "facebook.com", Label = "Facebook Pixel", Category = "Ad" },
-            new BlocklistEntry { Domain = "pixel.facebook.com", Label = "Facebook Pixel", Category = "Ad" },
-            new BlocklistEntry { Domain = "connect.facebook.net", Label = "Facebook Connect", Category = "Tracking" },
+            new BlocklistEntry { Domain = "snap.licdn.com", Label = "LinkedIn Insight", Category = "Tracking" },
+            // Session replay / heatmaps
+            new BlocklistEntry { Domain = "hotjar.com", Label = "Hotjar", Category = "Tracking" },
+            new BlocklistEntry { Domain = "hotjar.io", Label = "Hotjar", Category = "Tracking" },
+            new BlocklistEntry { Domain = "fullstory.com", Label = "FullStory", Category = "Tracking" },
+            new BlocklistEntry { Domain = "rs.fullstory.com", Label = "FullStory", Category = "Tracking" },
+            new BlocklistEntry { Domain = "mouseflow.com", Label = "Mouseflow", Category = "Tracking" },
+            new BlocklistEntry { Domain = "crazyegg.com", Label = "Crazy Egg", Category = "Tracking" },
+            new BlocklistEntry { Domain = "inspectlet.com", Label = "Inspectlet", Category = "Tracking" },
+            new BlocklistEntry { Domain = "logrocket.io", Label = "LogRocket", Category = "Tracking" },
+            new BlocklistEntry { Domain = "smartlook.com", Label = "Smartlook", Category = "Tracking" },
+            new BlocklistEntry { Domain = "luckyorange.com", Label = "Lucky Orange", Category = "Tracking" },
+            new BlocklistEntry { Domain = "luckyorange.net", Label = "Lucky Orange", Category = "Tracking" },
+            // Analytics
+            new BlocklistEntry { Domain = "segment.io", Label = "Segment", Category = "Tracking" },
+            new BlocklistEntry { Domain = "segment.com", Label = "Segment", Category = "Tracking" },
+            new BlocklistEntry { Domain = "api.segment.io", Label = "Segment", Category = "Tracking" },
+            new BlocklistEntry { Domain = "mixpanel.com", Label = "Mixpanel", Category = "Tracking" },
+            new BlocklistEntry { Domain = "api.mixpanel.com", Label = "Mixpanel", Category = "Tracking" },
+            new BlocklistEntry { Domain = "amplitude.com", Label = "Amplitude", Category = "Tracking" },
+            new BlocklistEntry { Domain = "api.amplitude.com", Label = "Amplitude", Category = "Tracking" },
+            new BlocklistEntry { Domain = "heapanalytics.com", Label = "Heap", Category = "Tracking" },
+            new BlocklistEntry { Domain = "chartbeat.com", Label = "Chartbeat", Category = "Tracking" },
+            new BlocklistEntry { Domain = "scorecardresearch.com", Label = "comScore", Category = "Tracking" },
+            new BlocklistEntry { Domain = "quantserve.com", Label = "Quantcast", Category = "Tracking" },
+            new BlocklistEntry { Domain = "omtrdc.net", Label = "Adobe Analytics", Category = "Tracking" },
+            new BlocklistEntry { Domain = "demdex.net", Label = "Adobe Audience Manager", Category = "Tracking" },
+            new BlocklistEntry { Domain = "2o7.net", Label = "Adobe Analytics", Category = "Tracking" },
+            new BlocklistEntry { Domain = "everesttech.net", Label = "Adobe Ad Cloud", Category = "Ad" },
+            // Ad exchanges / SSPs / DSPs
             new BlocklistEntry { Domain = "criteo.com", Label = "Criteo", Category = "Ad" },
             new BlocklistEntry { Domain = "criteo.net", Label = "Criteo", Category = "Ad" },
             new BlocklistEntry { Domain = "adnxs.com", Label = "Xandr/AppNexus", Category = "Ad" },
-            new BlocklistEntry { Domain = "rubiconproject.com", Label = "Rubicon Project", Category = "Ad" },
+            new BlocklistEntry { Domain = "ib.adnxs.com", Label = "AppNexus", Category = "Ad" },
+            new BlocklistEntry { Domain = "rubiconproject.com", Label = "Rubicon/Magnite", Category = "Ad" },
             new BlocklistEntry { Domain = "pubmatic.com", Label = "PubMatic", Category = "Ad" },
+            new BlocklistEntry { Domain = "ads.pubmatic.com", Label = "PubMatic", Category = "Ad" },
             new BlocklistEntry { Domain = "openx.net", Label = "OpenX", Category = "Ad" },
+            new BlocklistEntry { Domain = "casalemedia.com", Label = "Index Exchange", Category = "Ad" },
+            new BlocklistEntry { Domain = "indexexchange.com", Label = "Index Exchange", Category = "Ad" },
             new BlocklistEntry { Domain = "bidswitch.net", Label = "BidSwitch", Category = "Ad" },
             new BlocklistEntry { Domain = "taboola.com", Label = "Taboola", Category = "Ad" },
             new BlocklistEntry { Domain = "outbrain.com", Label = "Outbrain", Category = "Ad" },
+            new BlocklistEntry { Domain = "outbrainimg.com", Label = "Outbrain", Category = "Ad" },
             new BlocklistEntry { Domain = "sharethrough.com", Label = "Sharethrough", Category = "Ad" },
             new BlocklistEntry { Domain = "33across.com", Label = "33Across", Category = "Ad" },
             new BlocklistEntry { Domain = "triplelift.com", Label = "TripleLift", Category = "Ad" },
             new BlocklistEntry { Domain = "yieldmo.com", Label = "Yieldmo", Category = "Ad" },
             new BlocklistEntry { Domain = "media.net", Label = "Media.net", Category = "Ad" },
+            new BlocklistEntry { Domain = "sovrn.com", Label = "Sovrn", Category = "Ad" },
+            new BlocklistEntry { Domain = "smartadserver.com", Label = "Smart AdServer", Category = "Ad" },
+            new BlocklistEntry { Domain = "advertising.com", Label = "Verizon Advertising", Category = "Ad" },
+            new BlocklistEntry { Domain = "adsrvr.org", Label = "The Trade Desk", Category = "Ad" },
+            new BlocklistEntry { Domain = "mathtag.com", Label = "MediaMath", Category = "Ad" },
+            new BlocklistEntry { Domain = "rfihub.com", Label = "Sizmek", Category = "Ad" },
+            // DMPs / data
+            new BlocklistEntry { Domain = "bluekai.com", Label = "Oracle BlueKai", Category = "Tracking" },
+            new BlocklistEntry { Domain = "addthis.com", Label = "AddThis", Category = "Tracking" },
+            new BlocklistEntry { Domain = "krxd.net", Label = "Salesforce Krux", Category = "Tracking" },
+            new BlocklistEntry { Domain = "rlcdn.com", Label = "LiveRamp", Category = "Tracking" },
+            new BlocklistEntry { Domain = "lotame.com", Label = "Lotame", Category = "Tracking" },
+            new BlocklistEntry { Domain = "crwdcntrl.net", Label = "Lotame", Category = "Tracking" },
+            new BlocklistEntry { Domain = "tapad.com", Label = "Tapad", Category = "Tracking" },
+            new BlocklistEntry { Domain = "agkn.com", Label = "Neustar", Category = "Tracking" },
+            // Ad verification / misc
+            new BlocklistEntry { Domain = "moatads.com", Label = "Moat", Category = "Ad" },
+            new BlocklistEntry { Domain = "doubleverify.com", Label = "DoubleVerify", Category = "Ad" },
+            new BlocklistEntry { Domain = "adsafeprotected.com", Label = "IAS", Category = "Ad" },
+            new BlocklistEntry { Domain = "flashtalking.com", Label = "Flashtalking", Category = "Ad" },
+            new BlocklistEntry { Domain = "serving-sys.com", Label = "Sizmek", Category = "Ad" },
+            // Amazon, Snap, Pinterest
             new BlocklistEntry { Domain = "amazon-adsystem.com", Label = "Amazon Advertising", Category = "Ad" },
-            new BlocklistEntry { Domain = "aax.amazon-adsystem.com", Label = "Amazon AAX", Category = "Ad" }
+            new BlocklistEntry { Domain = "aax.amazon-adsystem.com", Label = "Amazon AAX", Category = "Ad" },
+            new BlocklistEntry { Domain = "sc-static.net", Label = "Snapchat", Category = "Tracking" },
+            new BlocklistEntry { Domain = "tr.snapchat.com", Label = "Snapchat Tracking", Category = "Ad" },
+            new BlocklistEntry { Domain = "ct.pinterest.com", Label = "Pinterest Tag", Category = "Ad" },
+            new BlocklistEntry { Domain = "trk.pinterest.com", Label = "Pinterest Tracking", Category = "Ad" },
+            // Attribution / mobile
+            new BlocklistEntry { Domain = "appsflyer.com", Label = "AppsFlyer", Category = "Tracking" },
+            new BlocklistEntry { Domain = "adjust.com", Label = "Adjust", Category = "Tracking" },
+            new BlocklistEntry { Domain = "app.adjust.com", Label = "Adjust", Category = "Tracking" },
+            new BlocklistEntry { Domain = "kochava.com", Label = "Kochava", Category = "Tracking" },
+            new BlocklistEntry { Domain = "singular.net", Label = "Singular", Category = "Tracking" },
+            // A/B testing
+            new BlocklistEntry { Domain = "optimizely.com", Label = "Optimizely", Category = "Tracking" },
+            new BlocklistEntry { Domain = "cdn.optimizely.com", Label = "Optimizely", Category = "Tracking" },
+            new BlocklistEntry { Domain = "vwo.com", Label = "VWO", Category = "Tracking" },
+            // Social / widgets
+            new BlocklistEntry { Domain = "sharethis.com", Label = "ShareThis", Category = "Tracking" },
+            new BlocklistEntry { Domain = "disqus.com", Label = "Disqus", Category = "Tracking" },
+            new BlocklistEntry { Domain = "disquscdn.com", Label = "Disqus", Category = "Tracking" },
+            // WordPress / Yandex
+            new BlocklistEntry { Domain = "pixel.wp.com", Label = "WordPress Pixel", Category = "Tracking" },
+            new BlocklistEntry { Domain = "stats.wp.com", Label = "WordPress Stats", Category = "Tracking" },
+            new BlocklistEntry { Domain = "mc.yandex.ru", Label = "Yandex Metrica", Category = "Tracking" },
+            // Marketing / chat
+            new BlocklistEntry { Domain = "hs-analytics.net", Label = "HubSpot", Category = "Tracking" },
+            new BlocklistEntry { Domain = "hs-scripts.com", Label = "HubSpot", Category = "Tracking" },
+            new BlocklistEntry { Domain = "pardot.com", Label = "Pardot", Category = "Tracking" },
+            new BlocklistEntry { Domain = "intercom.io", Label = "Intercom", Category = "Tracking" },
+            new BlocklistEntry { Domain = "intercomcdn.com", Label = "Intercom", Category = "Tracking" },
+            new BlocklistEntry { Domain = "drift.com", Label = "Drift", Category = "Tracking" },
+            new BlocklistEntry { Domain = "tealiumiq.com", Label = "Tealium", Category = "Tracking" },
+            new BlocklistEntry { Domain = "tags.tiqcdn.com", Label = "Tealium", Category = "Tracking" },
+            // Affiliate
+            new BlocklistEntry { Domain = "awin1.com", Label = "Awin", Category = "Ad" },
+            new BlocklistEntry { Domain = "shareasale.com", Label = "ShareASale", Category = "Ad" },
+            new BlocklistEntry { Domain = "dpbolvw.net", Label = "CJ Affiliate", Category = "Ad" },
+            new BlocklistEntry { Domain = "impact.com", Label = "Impact", Category = "Ad" },
         };
 
         // ════════════════════════════════════════════
@@ -576,7 +702,7 @@ namespace PrivacyMonitor
     function _blockEl(el, attr, val) {
         if (!val) return false;
         if (_isBlockedUrl(val)) {
-            try { el.setAttribute('data-pm-blocked', '1'); } catch(e) {}
+            try { el.setAttribute('data-pm-blocked', '1'); el.style.setProperty('display', 'none', 'important'); } catch(e) {}
             return true;
         }
         return false;
@@ -624,7 +750,7 @@ namespace PrivacyMonitor
                 const tag = node.tagName.toLowerCase();
                 const val = node.getAttribute && (node.getAttribute('src') || node.getAttribute('href'));
                 if ((tag === 'script' || tag === 'iframe' || tag === 'img' || tag === 'link' || tag === 'video' || tag === 'audio' || tag === 'source') &&
-                    val && _isBlockedUrl(val)) return node;
+                    val && _isBlockedUrl(val)) { try { node.setAttribute('data-pm-blocked','1'); node.style.setProperty('display','none','important'); } catch(e){} return node; }
             }
         } catch(e) {}
         return _append.call(this, node);
@@ -637,7 +763,7 @@ namespace PrivacyMonitor
                 const tag = node.tagName.toLowerCase();
                 const val = node.getAttribute && (node.getAttribute('src') || node.getAttribute('href'));
                 if ((tag === 'script' || tag === 'iframe' || tag === 'img' || tag === 'link' || tag === 'video' || tag === 'audio' || tag === 'source') &&
-                    val && _isBlockedUrl(val)) return node;
+                    val && _isBlockedUrl(val)) { try { node.setAttribute('data-pm-blocked','1'); node.style.setProperty('display','none','important'); } catch(e){} return node; }
             }
         } catch(e) {}
         return _insert.call(this, node, ref);
@@ -659,6 +785,30 @@ namespace PrivacyMonitor
         if (url && _isBlockedUrl(url)) { try { this.abort(); } catch(e) {} return; }
         return _open.apply(this, arguments);
     };
+
+    function _hideBlocked(el) {
+        try {
+            if (el.setAttribute && el.getAttribute('data-pm-blocked') === '1') { el.style.setProperty('display', 'none', 'important'); return; }
+            var src = el.src || el.getAttribute('src') || el.href || el.getAttribute('href') || '';
+            if (src && _isBlockedUrl(src)) { el.setAttribute('data-pm-blocked', '1'); el.style.setProperty('display', 'none', 'important'); }
+        } catch(e) {}
+    }
+    function _runHide() {
+        try {
+            document.querySelectorAll(""[data-pm-blocked='1']"").forEach(function(el){ el.style.setProperty('display', 'none', 'important'); });
+            document.querySelectorAll('script[src], iframe[src], img[src], link[href]').forEach(_hideBlocked);
+        } catch(e) {}
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _runHide);
+    else _runHide();
+    var _obs = new MutationObserver(function(mutations) {
+        mutations.forEach(function(m) {
+            if (m.addedNodes) m.addedNodes.forEach(function(n) {
+                if (n.nodeType === 1) { _hideBlocked(n); if (n.querySelectorAll) n.querySelectorAll('script[src], iframe[src], img[src], link[href]').forEach(_hideBlocked); }
+            });
+        });
+    });
+    try { _obs.observe(document.documentElement, { childList: true, subtree: true }); } catch(e) {}
 })();";
 
         public static string BuildBlockerSeedScript(IEnumerable<string> hosts)
@@ -813,6 +963,33 @@ namespace PrivacyMonitor
         {
             if (string.IsNullOrWhiteSpace(resourceContext)) return false;
             return resourceContext.Equals("Media", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static readonly string[] AdTrackerPathSegments = new[]
+        {
+            "/pagead/", "/pagead2.", "/ads/", "/ad.", "/adservice", "/adsystem",
+            "/analytics", "/ga.js", "/gtm.js", "/gtag/", "/collect", "/g/collect",
+            "/track", "/tracking", "/pixel", "/tr?", "/beacon", "/log", "/event",
+            "/conversion", "/impression", "/click", "/view?", "/view.",
+            "/doubleclick", "/googlesyndication", "/googleadservices",
+            "/fbq", "/fbevents", "/tr?id=", "/px.", "/sync?", "/match",
+            "/segment", "/mixpanel", "/amplitude", "/heapanalytics",
+            "/gtm/", "/gtag/js", "/ga/", "/analytics.js", "/stats.",
+            "/pixel.", "/tracking.", "/tracker.", "/tag.", "/script/",
+            "/b/ss", "/b/collect", "/everesttech", "/demdex", "/dpm.",
+            "/moat", "/doubleverify", "/adsafe", "/viewability"
+        };
+
+        private static bool IsAdOrTrackerPath(string pathOrUrl)
+        {
+            if (string.IsNullOrWhiteSpace(pathOrUrl) || pathOrUrl.Length < 4) return false;
+            var lower = pathOrUrl.ToLowerInvariant();
+            foreach (var seg in AdTrackerPathSegments)
+            {
+                if (lower.Contains(seg, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
 
         private static string NormalizeCategory(string category)

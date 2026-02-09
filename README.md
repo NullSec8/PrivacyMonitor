@@ -64,6 +64,8 @@ Run the publish script to build a single-file EXE, create a distribution ZIP, an
 
 **Install on another PC:** Unzip the ZIP (or copy the EXE), run `PrivacyMonitor.exe`. No installer or .NET required. If WebView2 is missing, the user can install it from the link shown in the app or on the download page.
 
+**Windows “not protected” / SmartScreen:** Unsigned builds trigger a one-time “Windows protected your PC” warning. Users can click **More info** → **Run anyway**. To **publish so Windows doesn’t say that**, see **[SIGNING.md](SIGNING.md)**: use SignPath Foundation (free for open source) or buy a certificate and set `CERT_PATH` + `CERT_PASSWORD` before running `publish.ps1`.
+
 ## Tech stack
 
 - **WPF** — UI (tabs, toolbar, sidebar, lists, cards).

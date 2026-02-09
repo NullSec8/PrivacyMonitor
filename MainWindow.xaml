@@ -2,21 +2,22 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Privacy Monitor" Width="1480" Height="920" MinWidth="900" MinHeight="600"
-        Background="#F0F2F5" WindowStartupLocation="CenterScreen"
+        Background="#EEF2F6" WindowStartupLocation="CenterScreen"
         PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
-        <!-- Chrome-style circular nav button -->
+        <!-- Nav button: rounded, subtle hover -->
         <Style x:Key="CNav" TargetType="Button">
-            <Setter Property="Width" Value="34"/><Setter Property="Height" Value="34"/>
+            <Setter Property="Width" Value="36"/><Setter Property="Height" Value="36"/>
             <Setter Property="FontSize" Value="15"/><Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="#5F6368"/>
+            <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="#475569"/>
             <Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="17">
+                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="18">
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#0000000F"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E2E8F0"/></Trigger>
+                    <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
@@ -66,12 +67,12 @@
             </ControlTemplate></Setter.Value></Setter>
         </Style>
 
-        <!-- Sidebar card -->
+        <!-- Sidebar card: soft shadow, clear border -->
         <Style x:Key="Card" TargetType="Border">
-            <Setter Property="Background" Value="White"/><Setter Property="CornerRadius" Value="12"/>
-            <Setter Property="Padding" Value="16"/><Setter Property="Margin" Value="0,0,0,10"/>
+            <Setter Property="Background" Value="White"/><Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Padding" Value="18"/><Setter Property="Margin" Value="0,0,0,12"/>
             <Setter Property="BorderBrush" Value="#E2E8F0"/><Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="8" ShadowDepth="0" Opacity="0.06" Color="Black"/></Setter.Value></Setter>
+            <Setter Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="12" ShadowDepth="0" Opacity="0.05" Color="Black"/></Setter.Value></Setter>
         </Style>
 
         <LinearGradientBrush x:Key="HeaderGradient" StartPoint="0,0" EndPoint="0,1">
@@ -88,22 +89,22 @@
 
         <Style x:Key="Chip" TargetType="Border">
             <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Padding" Value="10,4"/>
-            <Setter Property="Background" Value="#E2E8F0"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Background" Value="#E8ECF0"/>
         </Style>
     </Window.Resources>
 
     <DockPanel>
 
         <!-- TAB BAR -->
-        <Border DockPanel.Dock="Top" Background="#E2E8F0" Padding="10,8,10,0">
+        <Border DockPanel.Dock="Top" Background="#F1F5F9" Padding="12,10,12,0">
             <Border.Effect>
-                <DropShadowEffect BlurRadius="0" ShadowDepth="1" Opacity="0.06" Color="Black" Direction="270"/>
+                <DropShadowEffect BlurRadius="0" ShadowDepth="1" Opacity="0.05" Color="Black" Direction="270"/>
             </Border.Effect>
             <DockPanel>
-                <Button DockPanel.Dock="Right" Style="{StaticResource CNav}" Width="32" Height="28"
-                        Content="+" FontSize="20" Foreground="#475569" Click="NewTab_Click"
-                        ToolTip="New tab (Ctrl+T)" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                <Button DockPanel.Dock="Right" Style="{StaticResource CNav}" Width="34" Height="32"
+                        Content="+" FontSize="18" Foreground="#64748B" Click="NewTab_Click"
+                        ToolTip="New tab (Ctrl+T)" VerticalAlignment="Center" Margin="6,0,0,0"/>
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <StackPanel x:Name="TabBar" Orientation="Horizontal"/>
                 </ScrollViewer>
@@ -111,14 +112,17 @@
         </Border>
 
         <!-- NAV BAR -->
-        <Border DockPanel.Dock="Top" Background="#FFFFFF" Padding="10,8,10,8" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1">
+        <Border DockPanel.Dock="Top" Background="#FFFFFF" Padding="12,10,12,10" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1">
             <DockPanel>
                 <!-- Nav buttons -->
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,4,0">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0">
                     <Button x:Name="NavBack" Style="{StaticResource CNav}" Content="&#x2190;" Click="Back_Click" ToolTip="Back  (Alt+Left)"/>
                     <Button x:Name="NavForward" Style="{StaticResource CNav}" Content="&#x2192;" Click="Forward_Click" ToolTip="Forward  (Alt+Right)"/>
                     <Button Style="{StaticResource CNav}" Content="&#x21BB;" Click="Reload_Click" ToolTip="Reload  (F5)"/>
                     <Button Style="{StaticResource CNav}" Content="&#x2302;" Click="Home_Click" ToolTip="Home"/>
+                    <Button x:Name="StarBtn" Style="{StaticResource CNav}" Content="&#x2606;" Click="Star_Click" ToolTip="Bookmark this page" FontSize="14"/>
+                    <Button Style="{StaticResource CNav}" Content="Copy" Click="CopyUrl_Click" ToolTip="Copy URL" FontSize="10" Padding="6,0"/>
+                    <Button x:Name="BookmarksBtn" Style="{StaticResource CNav}" Content="&#x2605;" Click="Bookmarks_Click" ToolTip="Open bookmarks" FontSize="14"/>
                 </StackPanel>
 
                 <!-- Right side: protection controls + shield toggle -->
@@ -162,21 +166,21 @@
 
                 <!-- Omnibox (pill-shaped) -->
                 <StackPanel>
-                    <Border CornerRadius="22" Background="#F1F5F9" Height="40" Padding="16,0" Margin="2,0" VerticalAlignment="Center">
+                    <Border CornerRadius="24" Background="#F1F5F9" Height="44" Padding="18,0" Margin="4,0" VerticalAlignment="Center" BorderThickness="1" BorderBrush="Transparent">
                         <Border.Effect>
-                            <DropShadowEffect BlurRadius="0" ShadowDepth="0" Opacity="0.04" Color="Black"/>
+                            <DropShadowEffect BlurRadius="2" ShadowDepth="0" Opacity="0.03" Color="Black"/>
                         </Border.Effect>
                         <Grid>
                             <DockPanel>
-                                <TextBlock DockPanel.Dock="Left" x:Name="LockIcon" Text="" FontSize="10" FontWeight="SemiBold"
-                                           Foreground="#5F6368" VerticalAlignment="Center" Margin="0,0,8,0" FontFamily="Segoe UI"/>
-                                <TextBox x:Name="AddressBar" VerticalContentAlignment="Center" FontSize="13" FontFamily="Segoe UI"
-                                         BorderThickness="0" Background="Transparent" Foreground="#202124"
+                                <TextBlock DockPanel.Dock="Left" x:Name="LockIcon" Text="" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="#64748B" VerticalAlignment="Center" Margin="0,0,10,0" FontFamily="Segoe UI"/>
+                                <TextBox x:Name="AddressBar" VerticalContentAlignment="Center" FontSize="14" FontFamily="Segoe UI"
+                                         BorderThickness="0" Background="Transparent" Foreground="#0F172A"
                                          KeyDown="AddressBar_KeyDown" TextChanged="AddressBar_TextChanged"
                                          GotFocus="AddressBar_GotFocus" LostFocus="AddressBar_LostFocus"/>
                             </DockPanel>
-                            <TextBlock x:Name="AddressBarPlaceholder" IsHitTestVisible="False" VerticalAlignment="Center" Margin="28,0,0,0"
-                                       Text="Search (DuckDuckGo) or type a URL" FontSize="13" Foreground="#94A3B8" FontFamily="Segoe UI"/>
+                            <TextBlock x:Name="AddressBarPlaceholder" IsHitTestVisible="False" VerticalAlignment="Center" Margin="30,0,0,0"
+                                       Text="Search (DuckDuckGo) or type a URL" FontSize="14" Foreground="#94A3B8" FontFamily="Segoe UI"/>
                         </Grid>
                     </Border>
                     <!-- Address suggestions (visual scaffold) -->
@@ -193,15 +197,15 @@
         </Border>
 
         <!-- LOADING BAR -->
-        <ProgressBar x:Name="LoadingBar" DockPanel.Dock="Top" Height="3" Background="Transparent"
+        <ProgressBar x:Name="LoadingBar" DockPanel.Dock="Top" Height="4" Background="Transparent"
                      Foreground="#0891B2" IsIndeterminate="True" Visibility="Collapsed"/>
 
         <!-- STATUS BAR -->
-        <Border DockPanel.Dock="Bottom" Background="#F8FAFC" Padding="14,8" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0">
+        <Border DockPanel.Dock="Bottom" Background="#F8FAFC" Padding="16,10" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Left" x:Name="StatusText" Text="Ready — enter a URL above to start" Foreground="#5F6368" FontSize="12" FontFamily="Segoe UI"/>
+                <TextBlock DockPanel.Dock="Left" x:Name="StatusText" Text="Ready — enter a URL above to start" Foreground="#64748B" FontSize="12" FontFamily="Segoe UI"/>
                 <TextBlock DockPanel.Dock="Right" x:Name="RequestCountText" Text="" Foreground="#5F6368" FontSize="11" FontFamily="Segoe UI"/>
-                <TextBlock DockPanel.Dock="Right" x:Name="ProtectionStatusText" Text="" Foreground="#188038" FontSize="11" FontWeight="Medium" FontFamily="Segoe UI" Margin="0,0,12,0"/>
+                <TextBlock DockPanel.Dock="Right" x:Name="ProtectionStatusText" Text="" Foreground="#15803D" FontSize="12" FontWeight="Medium" FontFamily="Segoe UI" Margin="0,0,14,0"/>
                 <TextBlock/>
             </DockPanel>
         </Border>
@@ -216,6 +220,16 @@
             <!-- WebView container + crash overlay -->
             <Grid Grid.Column="0">
                 <Grid x:Name="WebViewContainer" Background="White"/>
+                <Popup x:Name="BookmarksPopup" Placement="Bottom" StaysOpen="False">
+                    <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="0" MinWidth="280" MaxHeight="400">
+                        <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.15" Color="Black"/></Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="Bookmarks" FontSize="12" FontWeight="SemiBold" Foreground="#202124" Margin="12,10,12,6" FontFamily="Segoe UI"/>
+                            <ListBox x:Name="BookmarksListBox" BorderThickness="0" Background="Transparent" MaxHeight="320"
+                                     SelectionChanged="BookmarksList_SelectionChanged" FontSize="11" FontFamily="Segoe UI" DisplayMemberPath="Display"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
                 <Border x:Name="CrashOverlay" Visibility="Collapsed" Background="#F0F2F5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
                         <TextBlock Text="This page crashed." FontSize="18" FontWeight="SemiBold" Foreground="#202124" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
@@ -231,27 +245,27 @@
                 <DockPanel>
 
                     <!-- Sidebar header -->
-                    <Border DockPanel.Dock="Top" Background="White" Padding="18,12" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1">
+                    <Border DockPanel.Dock="Top" Background="White" Padding="20,14" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1">
                         <DockPanel>
-                            <Button DockPanel.Dock="Right" Style="{StaticResource CNav}" Width="28" Height="28"
+                            <Button DockPanel.Dock="Right" Style="{StaticResource CNav}" Width="30" Height="30"
                                     Content="&#x2715;" FontSize="12" Click="ToggleSidebar_Click" ToolTip="Close panel"/>
                             <Button DockPanel.Dock="Right" x:Name="ExpertToggleBtn" Style="{StaticResource SecBtn}"
                                     Content="Expert" Click="ToggleExpert_Click" ToolTip="Toggle Expert/Simple view"
-                                    Margin="0,0,8,0" Height="26" Padding="12,0" FontSize="10"/>
+                                    Margin="0,0,10,0" Height="28" Padding="14,0" FontSize="11"/>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource AccentGradient}" Margin="0,0,10,0">
+                                <Border Width="36" Height="36" CornerRadius="18" Background="{StaticResource AccentGradient}" Margin="0,0,12,0">
                                     <Border.Effect>
-                                        <DropShadowEffect BlurRadius="8" ShadowDepth="0" Opacity="0.2" Color="#0891B2"/>
+                                        <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.18" Color="#0891B2"/>
                                     </Border.Effect>
-                                    <Image Source="pack://application:,,,/img.png" Width="18" Height="18" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Image Source="pack://application:,,,/img.png" Width="20" Height="20" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
-                                <TextBlock Text="Privacy Monitor" FontSize="15" FontWeight="SemiBold" Foreground="#0F172A" VerticalAlignment="Center" FontFamily="Segoe UI"/>
+                                <TextBlock Text="Privacy Monitor" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A" VerticalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
                         </DockPanel>
                     </Border>
 
                     <!-- Score banner -->
-                    <Border DockPanel.Dock="Top" x:Name="ScoreBanner" Background="{StaticResource HeaderGradient}" Padding="18,16">
+                    <Border DockPanel.Dock="Top" x:Name="ScoreBanner" Background="{StaticResource HeaderGradient}" Padding="20,18">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="120"/>
@@ -278,6 +292,7 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock x:Name="ScoreNum" Text="-- / 100" FontSize="24" FontWeight="Bold" Foreground="#202124" FontFamily="Segoe UI"/>
                                 <TextBlock x:Name="ScoreSummary" Text="Visit a website to see your privacy score." FontSize="11" Foreground="#5F6368" TextWrapping="Wrap" FontFamily="Segoe UI"/>
+                                <TextBlock x:Name="SimpleSummaryText" Text="" FontSize="10" Foreground="#64748B" TextWrapping="Wrap" Margin="0,4,0,0" FontFamily="Segoe UI" FontStyle="Italic"/>
                             </StackPanel>
 
                             <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0">
@@ -292,37 +307,40 @@
                     </Border>
 
                     <!-- Score bar -->
-                    <Border DockPanel.Dock="Top" Padding="18,6,18,10" Background="Transparent">
-                        <Grid Height="5">
-                            <Border CornerRadius="2.5" Background="#E2E8F0"/>
-                            <Border x:Name="ScoreBarFill" CornerRadius="2.5" Background="#0891B2" HorizontalAlignment="Left" Width="0"/>
+                    <Border DockPanel.Dock="Top" Padding="20,8,20,12" Background="Transparent">
+                        <Grid Height="6">
+                            <Border CornerRadius="3" Background="#E2E8F0"/>
+                            <Border x:Name="ScoreBarFill" CornerRadius="3" Background="#0891B2" HorizontalAlignment="Left" Width="0"/>
                         </Grid>
                     </Border>
 
-                    <!-- Stats row -->
-                    <Border DockPanel.Dock="Top" Background="White" Padding="12,10" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1">
+                    <!-- Simple: one line. Expert: full grid -->
+                    <Border x:Name="SimpleStatsBorder" DockPanel.Dock="Top" Background="White" Padding="16,12" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1">
+                        <TextBlock x:Name="SimpleStatsText" Text="" FontSize="13" Foreground="#475569" TextWrapping="Wrap" FontFamily="Segoe UI" ToolTip="Quick numbers for this page"/>
+                    </Border>
+                    <Border x:Name="StatsGridBorder" DockPanel.Dock="Top" Background="White" Padding="12,10" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Visibility="Collapsed">
                         <UniformGrid Columns="6">
-                            <StackPanel HorizontalAlignment="Center">
+                            <StackPanel HorizontalAlignment="Center" ToolTip="Total connections this page made (images, scripts, ads, etc.)">
                                 <TextBlock x:Name="StatTotal" Text="0" FontSize="16" FontWeight="Bold" Foreground="#202124" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                                 <TextBlock Text="Requests" FontSize="9" Foreground="#5F6368" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
-                            <StackPanel HorizontalAlignment="Center">
+                            <StackPanel HorizontalAlignment="Center" ToolTip="We blocked these from loading (ads or trackers you're protected from)">
                                 <TextBlock x:Name="StatBlocked" Text="0" FontSize="16" FontWeight="Bold" Foreground="#188038" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                                 <TextBlock Text="Blocked" FontSize="9" Foreground="#5F6368" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
-                            <StackPanel HorizontalAlignment="Center">
+                            <StackPanel HorizontalAlignment="Center" ToolTip="Connections to other companies' servers (normal for many sites)">
                                 <TextBlock x:Name="StatThirdParty" Text="0" FontSize="16" FontWeight="Bold" Foreground="#E37400" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
-                                <TextBlock Text="3rd-party" FontSize="9" Foreground="#5F6368" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
+                                <TextBlock Text="Other sites" FontSize="9" Foreground="#5F6368" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
-                            <StackPanel HorizontalAlignment="Center">
+                            <StackPanel HorizontalAlignment="Center" ToolTip="Known tracking or advertising services on this page">
                                 <TextBlock x:Name="StatTrackers" Text="0" FontSize="16" FontWeight="Bold" Foreground="#D93025" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                                 <TextBlock Text="Trackers" FontSize="9" Foreground="#5F6368" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
-                            <StackPanel HorizontalAlignment="Center">
+                            <StackPanel HorizontalAlignment="Center" ToolTip="Ways this page can recognize your device (e.g. canvas, fonts)">
                                 <TextBlock x:Name="StatFingerprints" Text="0" FontSize="16" FontWeight="Bold" Foreground="#A50E0E" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                                 <TextBlock Text="Fingerprint" FontSize="9" Foreground="#5F6368" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
-                            <StackPanel HorizontalAlignment="Center">
+                            <StackPanel HorizontalAlignment="Center" ToolTip="Cookies that may be used for tracking or ads">
                                 <TextBlock x:Name="StatCookies" Text="0" FontSize="16" FontWeight="Bold" Foreground="#E37400" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                                 <TextBlock Text="Cookies" FontSize="9" Foreground="#5F6368" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
@@ -330,7 +348,7 @@
                     </Border>
 
                     <!-- Analysis tab pills -->
-                    <Border DockPanel.Dock="Top" Background="White" Padding="10,6" BorderBrush="#DADCE0" BorderThickness="0,0,0,1">
+                    <Border DockPanel.Dock="Top" Background="White" Padding="12,10" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1">
                         <WrapPanel>
                             <Button x:Name="ATab0" Style="{StaticResource APill}" Content="Dashboard" Click="ATab_Click" Tag="0"/>
                             <Button x:Name="ATab1" Style="{StaticResource APill}" Content="Network" Click="ATab_Click" Tag="1"/>
@@ -343,14 +361,14 @@
                     </Border>
 
                     <!-- PANEL CONTENT -->
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12,10">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,12">
                         <Grid>
 
                             <!-- DASHBOARD -->
                             <StackPanel x:Name="Panel0">
                                 <!-- THREAT TIER BANNER -->
-                                <Border x:Name="TierBanner" CornerRadius="10" Padding="14,10" Margin="0,0,0,10">
-                                    <Border.Effect><DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.06" Color="Black"/></Border.Effect>
+                                <Border x:Name="TierBanner" CornerRadius="12" Padding="16,12" Margin="0,0,0,12" ToolTip="Quick take: is this page calm, normal, or busy with trackers?">
+                                    <Border.Effect><DropShadowEffect BlurRadius="6" ShadowDepth="0" Opacity="0.08" Color="Black"/></Border.Effect>
                                     <DockPanel>
                                         <TextBlock x:Name="TierIcon" DockPanel.Dock="Left" FontSize="20" VerticalAlignment="Center" Margin="0,0,10,0" FontFamily="Segoe UI Symbol" Text="--"/>
                                         <StackPanel>
@@ -360,10 +378,10 @@
                                     </DockPanel>
                                 </Border>
 
-                                <!-- CATEGORY RISK SCORES -->
-                                <Border Style="{StaticResource Card}" Padding="12,10">
+                                <!-- CATEGORY RISK SCORES (Expert only) -->
+                                <Border x:Name="CategoryCard" Style="{StaticResource Card}" Padding="12,10" Visibility="Collapsed">
                                     <StackPanel>
-                                        <TextBlock Text="Risk by category" FontSize="11" FontWeight="SemiBold" Foreground="#5F6368" Margin="0,0,0,8" FontFamily="Segoe UI"/>
+                                        <TextBlock Text="Risk by category" FontSize="11" FontWeight="SemiBold" Foreground="#5F6368" Margin="0,0,0,8" FontFamily="Segoe UI" ToolTip="What lowered or raised the score: tracking, fingerprinting, data sent elsewhere, security, behavior"/>
                                         <DockPanel x:Name="CatTrackingRow" Margin="0,0,0,5" ToolTip="Penalty from known trackers, ad networks, and analytics services">
                                             <TextBlock DockPanel.Dock="Left" Text="Tracking" FontSize="10" Foreground="#3C4043" Width="82" FontFamily="Segoe UI"/>
                                             <TextBlock DockPanel.Dock="Right" x:Name="CatTrackingVal" Text="--" FontSize="10" FontWeight="Bold" Foreground="#3C4043" Width="30" TextAlignment="Right" FontFamily="Segoe UI"/>
@@ -392,10 +410,10 @@
                                     </StackPanel>
                                 </Border>
 
-                                <TextBlock Text="Top trackers" FontSize="11" FontWeight="SemiBold" Foreground="#5F6368" Margin="2,0,0,6" FontFamily="Segoe UI"/>
+                                <TextBlock x:Name="TopTrackersHeader" Text="Who's on this page?" FontSize="11" FontWeight="SemiBold" Foreground="#5F6368" Margin="2,0,0,6" FontFamily="Segoe UI" ToolTip="Known tracking or ad services this page uses"/>
                                 <Border Style="{StaticResource Card}">
                                     <StackPanel>
-                                        <TextBlock x:Name="NoTrackersText" Text="No trackers on this page yet. Browse to see activity." FontSize="11" Foreground="#9AA0A6" FontFamily="Segoe UI"/>
+                                        <TextBlock x:Name="NoTrackersText" Text="No other companies detected yet. Browse to see who this page talks to." FontSize="11" Foreground="#9AA0A6" FontFamily="Segoe UI"/>
                                         <ItemsControl x:Name="TopTrackersList">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
@@ -421,7 +439,7 @@
                                     </StackPanel>
                                 </Border>
 
-                                <DockPanel Margin="2,4,0,6">
+                                <DockPanel Margin="2,4,0,6" ToolTip="Recent connections: this site, other companies, or blocked items">
                                     <TextBlock DockPanel.Dock="Left" Text="Live activity" FontSize="11" FontWeight="SemiBold" Foreground="#5F6368" FontFamily="Segoe UI"/>
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                         <CheckBox x:Name="LiveFeedBlockedOnly" Content="Blocked only" FontSize="10" Foreground="#5F6368" ToolTip="Show only blocked requests"
@@ -510,7 +528,7 @@
                                     </ItemsControl>
                                 </StackPanel>
 
-                                <StackPanel x:Name="BreakdownPanel">
+                                <StackPanel x:Name="BreakdownPanel" Visibility="Collapsed">
                                     <TextBlock Text="Score breakdown" FontSize="11" FontWeight="SemiBold" Foreground="#5F6368" Margin="2,8,0,4" FontFamily="Segoe UI"/>
                                     <TextBlock x:Name="BreakdownText" FontSize="10" Foreground="#5F6368" TextWrapping="Wrap" FontFamily="Segoe UI"/>
                                 </StackPanel>
@@ -518,9 +536,10 @@
 
                             <!-- NETWORK -->
                             <StackPanel x:Name="Panel1" Visibility="Collapsed">
+                                <TextBlock Text="Connections this page made (scripts, images, ads, etc.)" FontSize="10" Foreground="#64748B" TextWrapping="Wrap" Margin="0,0,0,8" FontFamily="Segoe UI"/>
                                 <DockPanel Margin="0,0,0,6">
                                     <CheckBox DockPanel.Dock="Left" x:Name="FilterCheck" Content="Tracking only" FontSize="11" FontFamily="Segoe UI" Foreground="#3C4043"
-                                              ToolTip="Show only third-party and tracker requests"
+                                              ToolTip="Show only: other companies and known trackers (hide normal page stuff)"
                                               IsChecked="True" Checked="Filter_Changed" Unchecked="Filter_Changed" VerticalAlignment="Center"/>
                                     <Border CornerRadius="16" Background="#E8EAED" Padding="10,0" Margin="8,0,0,0" Height="30">
                                         <TextBox x:Name="SearchBox" VerticalContentAlignment="Center" FontSize="11" FontFamily="Segoe UI"

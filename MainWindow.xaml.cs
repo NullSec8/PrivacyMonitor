@@ -32,6 +32,9 @@ namespace PrivacyMonitor
         private bool _adBlockEnabled = true;
         private readonly DispatcherTimer _uiTimer;
         private readonly SessionContext _session = new();
+        private List<BookmarkEntry> _bookmarks = new();
+        private List<(string Title, string Url)> _recentUrls = new();
+        private const int MaxRecent = 10;
 
         private Button[] _aTabButtons = Array.Empty<Button>();
         private UIElement[] _panels = Array.Empty<UIElement>();
@@ -39,9 +42,9 @@ namespace PrivacyMonitor
         // Chrome palette
         private static readonly SolidColorBrush TabBarBg     = new(Color.FromRgb(222, 225, 230)); // #DEE1E6
         private static readonly SolidColorBrush TabActiveBg  = Brushes.White;
-        private static readonly SolidColorBrush TabActiveFg  = new(Color.FromRgb(32, 33, 36));     // #202124
-        private static readonly SolidColorBrush TabInactiveBg = new(Color.FromRgb(210, 213, 218));  // subtle
-        private static readonly SolidColorBrush TabInactiveFg = new(Color.FromRgb(95, 99, 104));    // #5F6368
+        private static readonly SolidColorBrush TabActiveFg  = new(Color.FromRgb(15, 23, 42));     // #0F172A
+        private static readonly SolidColorBrush TabInactiveBg = new(Color.FromRgb(226, 232, 240));  // #E2E8F0
+        private static readonly SolidColorBrush TabInactiveFg = new(Color.FromRgb(71, 85, 105));    // #475569
         private static readonly SolidColorBrush PillActive   = new(Color.FromRgb(8, 145, 178));   // #0891B2
         private static readonly SolidColorBrush PillActiveFg = Brushes.White;
         private static readonly SolidColorBrush PillInactive = Brushes.Transparent;
@@ -59,6 +62,11 @@ namespace PrivacyMonitor
             .tip{background:#F8F9FA;border-radius:12px;padding:14px 16px;font-size:12px;color:#3C4043;line-height:1.5}
             .tip b{color:#0891B2;display:block;margin-bottom:2px;font-size:11px}
             .foot{position:fixed;bottom:16px;font-size:11px;color:#9AA0A6}
+            .recent{margin-top:24px;font-size:12px;color:#5F6368;width:480px;max-width:90%}
+            .recent a{color:#0891B2;text-decoration:none}
+            .recent a:hover{text-decoration:underline}
+            .recent ul{list-style:none;margin-top:8px;text-align:left}
+            .recent li{margin:6px 0;padding:4px 0;border-bottom:1px solid #eee}
         </style></head><body>
             <div class='logo'>Privacy <span>Monitor</span></div>
             <div class='sub'>Agjencia per Informim dhe Privatesi</div>
@@ -66,6 +74,7 @@ namespace PrivacyMonitor
             <input class='search' name='q' placeholder='Search with DuckDuckGo or type a URL' autofocus
                    onkeydown=""if(event.key==='Enter'){var v=this.value.trim();if(!v)return;if(v.indexOf(' ')>=0)return;if(v.indexOf('://')>=0||v.indexOf('.')>=0){event.preventDefault();if(v.indexOf('://')>=0||/^https?:\\/\\//i.test(v)||/^file:/i.test(v)){window.location.href=v}else{window.location.href='https://'+v}}}""/>
             </form>
+            {{RECENT}}
             <div class='tips'>
                 <div class='tip'><b>Search</b> Type a phrase or word and press Enter → opens DuckDuckGo</div>
                 <div class='tip'><b>URL</b> Type a site (e.g. google.com) and Enter → opens the site</div>
@@ -81,26 +90,89 @@ namespace PrivacyMonitor
             <div class='foot'>Privacy Monitor v1.0 &middot; Built for Windows</div>
         </body></html>";
 
+        private static string EscapeHtml(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
+        }
+
+        private string GetWelcomeHtml()
+        {
+            string recentSection = "";
+            if (_recentUrls.Count > 0)
+            {
+                var sb = new StringBuilder();
+                sb.Append("<div class='recent'><b>Recently visited</b><ul>");
+                foreach (var (title, url) in _recentUrls.Take(8))
+                {
+                    sb.Append("<li><a href='").Append(EscapeHtml(url)).Append("'>").Append(EscapeHtml(title.Length > 0 ? title : url)).Append("</a></li>");
+                }
+                sb.Append("</ul></div>");
+                recentSection = sb.ToString();
+            }
+            return WelcomeHtml.Replace("{{RECENT}}", recentSection);
+        }
+
         public MainWindow()
         {
             InitializeComponent();
             _aTabButtons = new[] { ATab0, ATab1, ATab2, ATab3, ATab4, ATab5, ATab6 };
             _panels = new UIElement[] { Panel0, Panel1, Panel2, Panel3, Panel4, Panel5, Panel6 };
             SwitchAnalysisTab(0);
+            Loaded += (_, _) => UpdateExpertVisibility(); // apply simple view by default
 
             _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             _uiTimer.Tick += (_, _) => { if (_dirty) { _dirty = false; RefreshAll(); } };
             _uiTimer.Start();
 
             Closing += MainWindow_Closing;
+            LoadBookmarks();
+            LoadRecent();
             Loaded += async (_, _) => await RestoreOrWelcomeAsync();
         }
 
-        private static string SessionPath()
+        private static string AppDataDir()
         {
             var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PrivacyMonitor");
             if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            return Path.Combine(dir, "session.json");
+            return dir;
+        }
+        private static string SessionPath() => Path.Combine(AppDataDir(), "session.json");
+        private static string BookmarksPath() => Path.Combine(AppDataDir(), "bookmarks.json");
+        private static string RecentPath() => Path.Combine(AppDataDir(), "recent.json");
+
+        private void LoadBookmarks()
+        {
+            try
+            {
+                if (File.Exists(BookmarksPath()))
+                    _bookmarks = JsonSerializer.Deserialize<List<BookmarkEntry>>(File.ReadAllText(BookmarksPath())) ?? new List<BookmarkEntry>();
+            }
+            catch { _bookmarks = new List<BookmarkEntry>(); }
+        }
+        private void SaveBookmarks()
+        {
+            try { File.WriteAllText(BookmarksPath(), JsonSerializer.Serialize(_bookmarks, new JsonSerializerOptions { WriteIndented = true })); } catch { }
+        }
+        private void LoadRecent()
+        {
+            try
+            {
+                if (File.Exists(RecentPath()))
+                {
+                    var raw = JsonSerializer.Deserialize<List<JsonElement>>(File.ReadAllText(RecentPath()));
+                    _recentUrls = (raw ?? new List<JsonElement>()).Select(e => (e.GetProperty("Title").GetString() ?? "", e.GetProperty("Url").GetString() ?? "")).Where(t => t.Item2.Length > 0).Take(MaxRecent).ToList();
+                }
+            }
+            catch { _recentUrls = new List<(string, string)>(); }
+        }
+        private void AddRecent(string title, string url)
+        {
+            if (string.IsNullOrWhiteSpace(url) || url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)) return;
+            _recentUrls.RemoveAll(t => string.Equals(t.Url, url, StringComparison.OrdinalIgnoreCase));
+            _recentUrls.Insert(0, (title.Length > 50 ? title.Substring(0, 50) + "…" : title, url));
+            while (_recentUrls.Count > MaxRecent) _recentUrls.RemoveAt(_recentUrls.Count - 1);
+            try { File.WriteAllText(RecentPath(), JsonSerializer.Serialize(_recentUrls.Select(t => new { Title = t.Title, Url = t.Url }))); } catch { }
         }
 
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -166,13 +238,18 @@ namespace PrivacyMonitor
             var expert = _expertMode ? Visibility.Visible : Visibility.Collapsed;
             var simple = _expertMode ? Visibility.Collapsed : Visibility.Visible;
 
+            // Stats: one line (simple) vs full grid (expert)
+            if (SimpleStatsBorder != null) SimpleStatsBorder.Visibility = simple;
+            if (StatsGridBorder != null) StatsGridBorder.Visibility = expert;
+
+            // Dashboard: hide technical blocks in simple mode
+            if (CategoryCard != null) CategoryCard.Visibility = expert;
+            BreakdownPanel.Visibility = expert;
+            MitigationPanel.Visibility = simple;
+
             // Fingerprint panel: simple vs expert list
             FpSimpleList.Visibility = simple;
             FingerprintList.Visibility = expert;
-
-            // Dashboard: breakdown only in expert; mitigation tips only in simple
-            BreakdownPanel.Visibility = expert;
-            MitigationPanel.Visibility = simple;
 
             // Forensics: expert sections vs simplified
             ForensicExpertPanel.Visibility = expert;
@@ -469,7 +546,7 @@ namespace PrivacyMonitor
                 await cw.AddScriptToExecuteOnDocumentCreatedAsync(ProtectionEngine.ElementBlockerBootstrapScript);
 
                 if (url == "about:welcome")
-                    cw.NavigateToString(WelcomeHtml);
+                    cw.NavigateToString(GetWelcomeHtml());
                 else
                     cw.Navigate(url);
             }
@@ -501,6 +578,7 @@ namespace PrivacyMonitor
                     StatusText.Text = t.CurrentHost.Length > 0 ? t.CurrentHost : "Ready — enter a URL above to start";
                     UpdateProtectionUI(t);
                     UpdateNavButtons();
+                    UpdateStarButton();
                     if (CrashOverlay != null) CrashOverlay.Visibility = t.IsCrashed ? Visibility.Visible : Visibility.Collapsed;
                 }
             }
@@ -612,13 +690,13 @@ namespace PrivacyMonitor
 
             var border = new Border
             {
-                CornerRadius = new CornerRadius(8, 8, 0, 0),
-                Padding = new Thickness(10, 6, 8, 6),
+                CornerRadius = new CornerRadius(10, 10, 0, 0),
+                Padding = new Thickness(12, 8, 10, 8),
                 Cursor = Cursors.Hand,
-                Margin = new Thickness(0, 0, 1, 0),
+                Margin = new Thickness(0, 0, 2, 0),
                 Background = TabInactiveBg,
                 Child = panel,
-                MinWidth = 70, MaxWidth = 220,
+                MinWidth = 80, MaxWidth = 220,
                 ToolTip = "New Tab"
             };
             border.MouseLeftButtonDown += (_, _) => SwitchToTab(cid);
@@ -632,7 +710,7 @@ namespace PrivacyMonitor
             if (tab.TabHeader.Child is DockPanel dp && dp.Children.Count > 0 && dp.Children[0] is Button cb)
                 cb.Foreground = active ? TabActiveFg : TabInactiveFg;
             // Active tab gets a subtle shadow
-            tab.TabHeader.Effect = active ? new DropShadowEffect { BlurRadius = 4, ShadowDepth = 1, Opacity = 0.08, Color = Colors.Black } : null;
+            tab.TabHeader.Effect = active ? new DropShadowEffect { BlurRadius = 6, ShadowDepth = 0, Opacity = 0.06, Color = Colors.Black } : null;
         }
 
         private void UpdateTabTitle(BrowserTab tab)
@@ -824,7 +902,9 @@ namespace PrivacyMonitor
                     StatusText.Text = string.IsNullOrEmpty(tab.CurrentHost) ? "Ready — enter a URL above to start" : tab.CurrentHost;
                     UpdateProtectionUI(tab);
                     UpdateNavButtons();
+                    UpdateStarButton();
                 }
+                AddRecent(tab.Title ?? "", tab.Url ?? "");
             });
             if (!tab.IsReady) return;
 
@@ -884,7 +964,7 @@ namespace PrivacyMonitor
                 if (!string.IsNullOrEmpty(tab.Url) && !tab.Url.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
                     tab.WebView.CoreWebView2?.Navigate(tab.Url);
                 else
-                    tab.WebView.CoreWebView2?.NavigateToString(WelcomeHtml);
+                    tab.WebView.CoreWebView2?.NavigateToString(GetWelcomeHtml());
             }
             catch { }
         }
@@ -1150,6 +1230,9 @@ namespace PrivacyMonitor
             var score = PrivacyEngine.CalculateScore(scan);
             scan.Score = score; scan.GdprFindings = PrivacyEngine.MapToGdpr(scan);
 
+            // One-line summary for everyone
+            if (SimpleSummaryText != null) SimpleSummaryText.Text = GetSimpleSummary(score, tab);
+
             // Threat Tier banner
             UpdateTierBanner(score);
 
@@ -1160,7 +1243,7 @@ namespace PrivacyMonitor
             // Score banner
             GradeText.Text = score.Grade; GradeText.Foreground = new SolidColorBrush(Color.FromRgb(32, 33, 36));
             ScoreNum.Text = $"{score.NumericScore} / 100";
-            ScoreSummary.Text = score.Summary;
+            ScoreSummary.Text = _expertMode ? score.Summary : (score.NumericScore >= 80 ? "Good. Few trackers." : score.NumericScore >= 55 ? "Okay. Some other companies involved." : "Lots of tracking. You're protected.");
             ScoreChip.Text = $"Score {score.NumericScore}";
             TierChip.Text = score.TierLabel;
             UpdateScoreRing(score.NumericScore);
@@ -1172,12 +1255,19 @@ namespace PrivacyMonitor
 
             // Stats
             int allTrackingCookies = PrivacyEngine.CountAllTrackingCookies(scan);
+            int thirdCount = tab.Requests.Count(r => r.IsThirdParty);
+            int trackerCount = tab.Requests.Count(r => !string.IsNullOrEmpty(r.TrackerLabel) && !r.IsBlocked);
             StatTotal.Text = tab.Requests.Count.ToString();
             StatBlocked.Text = tab.BlockedCount.ToString();
-            StatThirdParty.Text = tab.Requests.Count(r => r.IsThirdParty).ToString();
-            StatTrackers.Text = tab.Requests.Count(r => !string.IsNullOrEmpty(r.TrackerLabel) && !r.IsBlocked).ToString();
+            StatThirdParty.Text = thirdCount.ToString();
+            StatTrackers.Text = trackerCount.ToString();
             StatFingerprints.Text = tab.Fingerprints.Count.ToString();
             StatCookies.Text = allTrackingCookies.ToString();
+            // Simple view: one line
+            if (SimpleStatsText != null)
+            {
+                SimpleStatsText.Text = tab.Requests.Count == 0 ? "Load a page to see numbers." : string.Join("  ·  ", new List<string> { $"{tab.Requests.Count} connections", $"{tab.BlockedCount} blocked", $"{thirdCount} from other companies" }.Concat(trackerCount > 0 ? new[] { $"{trackerCount} trackers" } : Array.Empty<string>()));
+            }
 
             // Update protection UI (badge, status bar)
             UpdateProtectionUI(tab);
@@ -1196,9 +1286,10 @@ namespace PrivacyMonitor
             GdprList.ItemsSource = scan.GdprFindings.Select(g => new GdprListItem { Article = g.Article, Title = g.Title,
                 Description = g.Description, Severity = g.Severity, SeverityColor = SeverityBrush(g.Severity), Count = $"({g.Count})" }).ToList();
 
-            // Top trackers
+            // Top trackers (fewer in simple mode)
+            int topN = _expertMode ? 8 : 5;
             var topT = tab.Requests.Where(r => !string.IsNullOrEmpty(r.TrackerLabel)).GroupBy(r => r.TrackerLabel)
-                .OrderByDescending(g => g.Count()).Take(8).Select(g => {
+                .OrderByDescending(g => g.Count()).Take(topN).Select(g => {
                     double avgConf = g.Average(r => r.ThreatConfidence);
                     var (cLabel, cColor) = ConfidenceToLabel(avgConf);
                     return new TrackerSummaryItem { Name = g.Key, Count = $"{g.Count()} req", SampleHost = g.First().Host,
@@ -1214,28 +1305,27 @@ namespace PrivacyMonitor
             if (blockedOnly) liveItems = liveItems.Where(r => r.IsBlocked);
             if (!string.IsNullOrEmpty(liveSearch)) liveItems = liveItems.Where(r => r.Host.Contains(liveSearch, StringComparison.OrdinalIgnoreCase));
 
-            LiveFeed.ItemsSource = liveItems.TakeLast(18).Reverse().Select(r => {
+            int liveN = _expertMode ? 18 : 8;
+            LiveFeed.ItemsSource = liveItems.TakeLast(liveN).Reverse().Select(r => {
                 string label; SolidColorBrush color;
                 if (r.IsBlocked)
                 {
-                    string shortLabel = ConfidenceShortLabel(r.BlockConfidence > 0 ? r.BlockConfidence : r.ThreatConfidence);
-                    string baseLabel = r.BlockCategory == "Ad" ? "BLOCKED AD" : r.BlockCategory == "Behavioral" ? "BLOCKED BEHAVIOR" : "BLOCKED TRACKER";
-                    label = shortLabel.Length > 0 ? $"{baseLabel} ({shortLabel})" : baseLabel;
+                    if (_expertMode)
+                    {
+                        string shortLabel = ConfidenceShortLabel(r.BlockConfidence > 0 ? r.BlockConfidence : r.ThreatConfidence);
+                        string baseLabel = r.BlockCategory == "Ad" ? "BLOCKED AD" : r.BlockCategory == "Behavioral" ? "BLOCKED BEHAVIOR" : "BLOCKED TRACKER";
+                        label = shortLabel.Length > 0 ? $"{baseLabel} ({shortLabel})" : baseLabel;
+                    }
+                    else label = "Blocked";
                     color = new SolidColorBrush(Color.FromRgb(217, 48, 37));
                 }
                 else if (!string.IsNullOrEmpty(r.TrackerLabel))
                 {
-                    if (_expertMode)
-                        label = "TRACKER";
-                    else
-                    {
-                        var (cLabel, _) = ConfidenceToLabel(r.ThreatConfidence);
-                        label = cLabel.Length > 0 ? cLabel.Split(' ')[0] : "TRACKER"; // "Confirmed" / "Likely" / "Possibly"
-                    }
+                    label = _expertMode ? "TRACKER" : "Tracker";
                     color = new SolidColorBrush(Color.FromRgb(217, 48, 37));
                 }
-                else if (r.IsThirdParty) { label = "3RD"; color = new SolidColorBrush(Color.FromRgb(227, 116, 0)); }
-                else { label = "1ST"; color = new SolidColorBrush(Color.FromRgb(24, 128, 56)); }
+                else if (r.IsThirdParty) { label = _expertMode ? "3RD" : "Other"; color = new SolidColorBrush(Color.FromRgb(227, 116, 0)); }
+                else { label = _expertMode ? "1ST" : "This site"; color = new SolidColorBrush(Color.FromRgb(24, 128, 56)); }
                 return new LiveFeedItem { Time = r.Time.ToString("HH:mm:ss"), Host = r.Host, Label = label, LabelColor = color };
             }).ToList();
 
@@ -1264,17 +1354,20 @@ namespace PrivacyMonitor
             var visible = tab.Requests.AsEnumerable();
             if (filterOn) visible = visible.Where(r => r.IsThirdParty || !string.IsNullOrEmpty(r.TrackerLabel) || r.TrackingParams.Count > 0);
             if (search.Length > 0) visible = visible.Where(r => r.Host.Contains(search, StringComparison.OrdinalIgnoreCase) || r.Path.Contains(search, StringComparison.OrdinalIgnoreCase) || (r.TrackerLabel?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
-            RequestList.ItemsSource = visible.Reverse().Take(300).Select(r => new RequestListItem {
+            RequestList.ItemsSource = visible.Reverse().Take(300).Select(r => {
+                string typeLabel = r.IsBlocked ? (_expertMode ? (r.BlockCategory == "Ad" ? "BLOCKED AD" : r.BlockCategory == "Behavioral" ? "BLOCKED BEHAVIOR" : "BLOCKED TRACKER") : "Blocked") :
+                    !string.IsNullOrEmpty(r.TrackerLabel) ? (_expertMode ? "TRACKER" : "Tracker") : r.IsThirdParty ? (_expertMode ? "THIRD-PARTY" : "Other company") : (_expertMode ? "FIRST-PARTY" : "This site");
+                return new RequestListItem {
                 Host = r.Host, Path = r.Path.Length > 50 ? r.Path[..50] + "..." : r.Path, Method = r.Method,
                 Status = r.IsBlocked ? "BLK" : r.StatusCode > 0 ? r.StatusCode.ToString() : "...",
-                TypeLabel = r.IsBlocked ? (r.BlockCategory == "Ad" ? "BLOCKED AD" : r.BlockCategory == "Behavioral" ? "BLOCKED BEHAVIOR" : "BLOCKED TRACKER") :
-                    !string.IsNullOrEmpty(r.TrackerLabel) ? "TRACKER" : r.IsThirdParty ? "THIRD-PARTY" : "FIRST-PARTY",
+                TypeLabel = typeLabel,
                 TypeColor = r.IsBlocked ? new SolidColorBrush(Color.FromRgb(217, 48, 37)) :
                     !string.IsNullOrEmpty(r.TrackerLabel) ? new SolidColorBrush(Color.FromRgb(217, 48, 37)) :
                     r.IsThirdParty ? new SolidColorBrush(Color.FromRgb(227, 116, 0)) : new SolidColorBrush(Color.FromRgb(24, 128, 56)),
                 ConfidenceLabel = r.IsBlocked ? ConfidenceShortLabel(r.BlockConfidence > 0 ? r.BlockConfidence : r.ThreatConfidence) : r.ThreatConfidence > 0 ? $"{r.ThreatConfidence:P0}" : "",
                 ToolTip = BuildBlockedTooltip(r),
-                Entry = r }).ToList();
+                Entry = r };
+            }).ToList();
         }
 
         private void RefreshStorageList(BrowserTab tab)
@@ -1347,16 +1440,45 @@ namespace PrivacyMonitor
         // ================================================================
         //  THREAT TIER BANNER
         // ================================================================
+        private static string GetSimpleSummary(PrivacyScore score, BrowserTab tab)
+        {
+            if (tab.Requests.Count == 0) return "";
+            if (score.NumericScore >= 80) return "This page is mostly calm. Few trackers.";
+            if (score.NumericScore >= 55) return "This page talks to several other companies. Normal for many sites.";
+            if (tab.BlockedCount > 0) return "Lots of tracking here — we blocked some so you're protected.";
+            return "This page has a lot of tracking. Use protection or browse elsewhere if you prefer.";
+        }
+
         private void UpdateTierBanner(PrivacyScore score)
         {
-            TierLabel.Text = score.TierLabel;
-            TierDetail.Text = score.Tier switch
+            if (_expertMode)
             {
-                ThreatTier.SurveillanceGrade => "Extensive tracking infrastructure with identity stitching, session replay, or data broker activity.",
-                ThreatTier.AggressiveTracking => "Multiple advertising trackers, fingerprinting, or session replay detected.",
-                ThreatTier.TypicalWebTracking => "Standard analytics and third-party tracking present.",
-                _ => "Minimal or no tracking detected. Basic web infrastructure only."
-            };
+                TierLabel.Text = score.TierLabel;
+                TierDetail.Text = score.Tier switch
+                {
+                    ThreatTier.SurveillanceGrade => "Extensive tracking infrastructure with identity stitching, session replay, or data broker activity.",
+                    ThreatTier.AggressiveTracking => "Multiple advertising trackers, fingerprinting, or session replay detected.",
+                    ThreatTier.TypicalWebTracking => "Standard analytics and third-party tracking present.",
+                    _ => "Minimal or no tracking detected. Basic web infrastructure only."
+                };
+            }
+            else
+            {
+                TierLabel.Text = score.Tier switch
+                {
+                    ThreatTier.SurveillanceGrade => "Worth being aware",
+                    ThreatTier.AggressiveTracking => "Lots of tracking",
+                    ThreatTier.TypicalWebTracking => "Normal for many sites",
+                    _ => "Mostly calm"
+                };
+                TierDetail.Text = score.Tier switch
+                {
+                    ThreatTier.SurveillanceGrade => "This page has extensive tracking. You're still in control.",
+                    ThreatTier.AggressiveTracking => "Several ad or tracking services here. We blocked some.",
+                    ThreatTier.TypicalWebTracking => "Some other companies are involved. Common on the web.",
+                    _ => "Few or no trackers. This page is relatively private."
+                };
+            }
             TierIcon.Text = score.Tier switch
             {
                 ThreatTier.SurveillanceGrade => "\u26A0",  // warning
@@ -1733,8 +1855,58 @@ namespace PrivacyMonitor
         private void Home_Click(object sender, RoutedEventArgs e)
         {
             var tab = ActiveTab;
-            if (tab?.IsReady == true) tab.WebView.CoreWebView2.NavigateToString(WelcomeHtml);
+            if (tab?.IsReady != true) return;
+            tab.WebView.CoreWebView2.NavigateToString(GetWelcomeHtml());
         }
+
+        private void Star_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            var url = tab?.Url?.Trim() ?? "";
+            if (string.IsNullOrEmpty(url) || url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)) return;
+            var title = (tab?.Title?.Trim() ?? "").Length > 0 ? tab!.Title.Trim() : new Uri(url).Host;
+            var existing = _bookmarks.FirstOrDefault(b => string.Equals(b.Url, url, StringComparison.OrdinalIgnoreCase));
+            if (existing != null) { _bookmarks.Remove(existing); SaveBookmarks(); if (StatusText != null) StatusText.Text = "Bookmark removed."; }
+            else { _bookmarks.Add(new BookmarkEntry { Title = title, Url = url }); SaveBookmarks(); if (StatusText != null) StatusText.Text = "Bookmark added."; }
+            UpdateStarButton();
+        }
+
+        private void CopyUrl_Click(object sender, RoutedEventArgs e)
+        {
+            var url = AddressBar?.Text?.Trim() ?? "";
+            if (string.IsNullOrEmpty(url)) return;
+            try { Clipboard.SetText(url); if (StatusText != null) StatusText.Text = "URL copied."; } catch { }
+        }
+
+        private void Bookmarks_Click(object sender, RoutedEventArgs e)
+        {
+            if (BookmarksBtn != null) BookmarksPopup.PlacementTarget = BookmarksBtn;
+            BookmarksListBox.ItemsSource = _bookmarks.OrderByDescending(b => b.Added).Select(b => new { Display = b.Title.Length > 0 ? b.Title : b.Url, b.Url }).ToList();
+            BookmarksPopup.IsOpen = true;
+        }
+
+        private void BookmarksList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (BookmarksListBox.SelectedItem == null) return;
+            var item = BookmarksListBox.SelectedItem;
+            var urlProp = item.GetType().GetProperty("Url");
+            var url = urlProp?.GetValue(item)?.ToString() ?? "";
+            if (string.IsNullOrEmpty(url)) return;
+            BookmarksPopup.IsOpen = false;
+            var tab = ActiveTab;
+            if (tab?.IsReady == true) try { tab.WebView.CoreWebView2.Navigate(url); } catch { }
+        }
+
+        private void UpdateStarButton()
+        {
+            if (StarBtn == null) return;
+            var tab = ActiveTab;
+            var url = tab?.Url?.Trim() ?? "";
+            bool isBookmarked = !string.IsNullOrEmpty(url) && _bookmarks.Any(b => string.Equals(b.Url, url, StringComparison.OrdinalIgnoreCase));
+            StarBtn.Content = isBookmarked ? "\u2605" : "\u2606"; // ★ / ☆
+            StarBtn.ToolTip = isBookmarked ? "Remove bookmark" : "Bookmark this page";
+        }
+
 
         private const string SearchEngineUrl = "https://duckduckgo.com/?q=";
 

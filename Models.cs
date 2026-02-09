@@ -196,6 +196,13 @@ namespace PrivacyMonitor
         public string Type { get; set; } = "";
     }
 
+    public class BookmarkEntry
+    {
+        public string Title { get; set; } = "";
+        public string Url { get; set; } = "";
+        public DateTime Added { get; set; } = DateTime.UtcNow;
+    }
+
     public class PrivacyScore
     {
         public int NumericScore { get; set; }

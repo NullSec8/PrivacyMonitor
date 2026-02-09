@@ -45,6 +45,36 @@ if (Test-Path $webView2Folder) {
   Remove-Item $runtimeZip -Force -ErrorAction SilentlyContinue
 }
 
+# Optional: code-sign the exe so Windows won't say "not protected" (SmartScreen).
+# Set CERT_PATH (path to .pfx) and CERT_PASSWORD. See SIGNING.md for details.
+# SignPath Foundation (signpath.org) offers free signing for open source.
+$certPath = $env:CERT_PATH
+$certPass = $env:CERT_PASSWORD
+$signTool = $env:SIGNTOOL_PATH
+if (-not $signTool) {
+  $kitsRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+  if (Test-Path $kitsRoot) {
+    $latest = Get-ChildItem $kitsRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
+    if ($latest) {
+      $x64 = Join-Path $latest.FullName "x64\signtool.exe"
+      if (Test-Path $x64) { $signTool = $x64 }
+    }
+  }
+}
+if ($signTool -and $certPath -and (Test-Path $certPath)) {
+  Write-Host "Signing executable (Windows will not show 'not protected')..."
+  try {
+    $signArgs = @("sign", "/f", $certPath, "/tr", "http://timestamp.digicert.com", "/td", "sha256", "/fd", "sha256", $exePath)
+    if ($certPass) { $signArgs = @("sign", "/f", $certPath, "/p", $certPass, "/tr", "http://timestamp.digicert.com", "/td", "sha256", "/fd", "sha256", $exePath) }
+    & $signTool $signArgs
+    if ($LASTEXITCODE -eq 0) { Write-Host "Signed successfully." } else { Write-Host "Signing failed (exit $LASTEXITCODE). Exe is still valid." }
+  } catch {
+    Write-Host "Signing failed: $_ . Exe is still valid."
+  }
+} else {
+  Write-Host "Skipping code signing. To sign: set CERT_PATH and CERT_PASSWORD (and optionally SIGNTOOL_PATH). See SIGNING.md."
+}
+
 # Copy exe to website for direct download
 Copy-Item $exePath (Join-Path $websiteDir 'PrivacyMonitor.exe') -Force
 Write-Host "Copied exe to website/PrivacyMonitor.exe"
@@ -85,6 +115,18 @@ SECURITY
 --------
 - The app does not phone home. All analysis runs on your machine.
 - To verify the download, check the SHA256 hash on the website.
+
+WINDOWS "NOT PROTECTED" / SMARTSCREEN MESSAGE
+----------------------------------------------
+If Windows says "Windows protected your PC" or "This app might harm your device",
+it is because the app is not code-signed (no certificate). The app is safe to run.
+
+What to do:
+1. Click "More info".
+2. Click "Run anyway".
+
+You can verify the file is unchanged by checking its SHA256 hash (see website or
+build-info). No code runs until you run the exe yourself.
 
 Unzip this file on any Windows 10/11 (64-bit) PC and run PrivacyMonitor.exe.
 "@
