@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Privacy Monitor" Width="1480" Height="920" MinWidth="900" MinHeight="600"
-        Background="#F6F8FB" WindowStartupLocation="CenterScreen"
+        Background="#F0F2F5" WindowStartupLocation="CenterScreen"
         PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
@@ -23,30 +23,30 @@
 
         <!-- Analysis tab pill -->
         <Style x:Key="APill" TargetType="Button">
-            <Setter Property="Height" Value="28"/><Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Height" Value="30"/><Setter Property="Padding" Value="14,0"/>
             <Setter Property="FontSize" Value="11"/><Setter Property="FontWeight" Value="Medium"/><Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="#5F6368"/>
-            <Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Margin" Value="0,0,2,0"/>
+            <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="#475569"/>
+            <Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Margin" Value="0,0,4,0"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="14" Padding="{TemplateBinding Padding}">
+                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="15" Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#0000000A"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#F1F5F9"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
 
         <!-- Primary action button -->
         <Style x:Key="PriBtn" TargetType="Button">
-            <Setter Property="Height" Value="32"/><Setter Property="Padding" Value="16,0"/>
+            <Setter Property="Height" Value="34"/><Setter Property="Padding" Value="18,0"/>
             <Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="Background" Value="#1A73E8"/><Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#0891B2"/><Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="16" Padding="{TemplateBinding Padding}">
+                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="17" Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#1669D3"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#0E7490"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
@@ -68,37 +68,41 @@
 
         <!-- Sidebar card -->
         <Style x:Key="Card" TargetType="Border">
-            <Setter Property="Background" Value="White"/><Setter Property="CornerRadius" Value="14"/>
-            <Setter Property="Padding" Value="14"/><Setter Property="Margin" Value="0,0,0,8"/>
-            <Setter Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="10" ShadowDepth="1" Opacity="0.08" Color="Black"/></Setter.Value></Setter>
+            <Setter Property="Background" Value="White"/><Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="16"/><Setter Property="Margin" Value="0,0,0,10"/>
+            <Setter Property="BorderBrush" Value="#E2E8F0"/><Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="8" ShadowDepth="0" Opacity="0.06" Color="Black"/></Setter.Value></Setter>
         </Style>
 
-        <LinearGradientBrush x:Key="HeaderGradient" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#E8F0FE" Offset="0"/>
-            <GradientStop Color="#FDFBFF" Offset="1"/>
+        <LinearGradientBrush x:Key="HeaderGradient" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#E8EEF7" Offset="0"/>
+            <GradientStop Color="#FFFFFF" Offset="1"/>
         </LinearGradientBrush>
 
         <LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#2CB67D" Offset="0"/>
-            <GradientStop Color="#2B9DF4" Offset="1"/>
+            <GradientStop Color="#0D9488" Offset="0"/>
+            <GradientStop Color="#0891B2" Offset="1"/>
         </LinearGradientBrush>
-        <SolidColorBrush x:Key="AccentBlue" Color="#2B9DF4"/>
-        <SolidColorBrush x:Key="AccentGreen" Color="#2CB67D"/>
+        <SolidColorBrush x:Key="AccentBlue" Color="#0891B2"/>
+        <SolidColorBrush x:Key="AccentGreen" Color="#0D9488"/>
 
         <Style x:Key="Chip" TargetType="Border">
-            <Setter Property="CornerRadius" Value="12"/>
-            <Setter Property="Padding" Value="8,2"/>
-            <Setter Property="Background" Value="#EEF2F7"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Background" Value="#E2E8F0"/>
         </Style>
     </Window.Resources>
 
     <DockPanel>
 
         <!-- TAB BAR -->
-        <Border DockPanel.Dock="Top" Background="#DEE1E6" Padding="8,8,8,0">
+        <Border DockPanel.Dock="Top" Background="#E2E8F0" Padding="10,8,10,0">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="0" ShadowDepth="1" Opacity="0.06" Color="Black" Direction="270"/>
+            </Border.Effect>
             <DockPanel>
                 <Button DockPanel.Dock="Right" Style="{StaticResource CNav}" Width="32" Height="28"
-                        Content="+" FontSize="20" Foreground="#5F6368" Click="NewTab_Click"
+                        Content="+" FontSize="20" Foreground="#475569" Click="NewTab_Click"
                         ToolTip="New tab (Ctrl+T)" VerticalAlignment="Center" Margin="4,0,0,0"/>
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <StackPanel x:Name="TabBar" Orientation="Horizontal"/>
@@ -106,13 +110,13 @@
             </DockPanel>
         </Border>
 
-        <!-- NAV BAR (Chrome-style: white toolbar with pill omnibox) -->
-        <Border DockPanel.Dock="Top" Background="#FFFFFF" Padding="8,6,8,6" BorderBrush="#DADCE0" BorderThickness="0,0,0,1">
+        <!-- NAV BAR -->
+        <Border DockPanel.Dock="Top" Background="#FFFFFF" Padding="10,8,10,8" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1">
             <DockPanel>
                 <!-- Nav buttons -->
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,4,0">
-                    <Button Style="{StaticResource CNav}" Content="&#x2190;" Click="Back_Click" ToolTip="Back  (Alt+Left)"/>
-                    <Button Style="{StaticResource CNav}" Content="&#x2192;" Click="Forward_Click" ToolTip="Forward  (Alt+Right)"/>
+                    <Button x:Name="NavBack" Style="{StaticResource CNav}" Content="&#x2190;" Click="Back_Click" ToolTip="Back  (Alt+Left)"/>
+                    <Button x:Name="NavForward" Style="{StaticResource CNav}" Content="&#x2192;" Click="Forward_Click" ToolTip="Forward  (Alt+Right)"/>
                     <Button Style="{StaticResource CNav}" Content="&#x21BB;" Click="Reload_Click" ToolTip="Reload  (F5)"/>
                     <Button Style="{StaticResource CNav}" Content="&#x2302;" Click="Home_Click" ToolTip="Home"/>
                 </StackPanel>
@@ -158,7 +162,10 @@
 
                 <!-- Omnibox (pill-shaped) -->
                 <StackPanel>
-                    <Border CornerRadius="20" Background="#F1F3F4" Height="36" Padding="14,0" Margin="2,0" VerticalAlignment="Center">
+                    <Border CornerRadius="22" Background="#F1F5F9" Height="40" Padding="16,0" Margin="2,0" VerticalAlignment="Center">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="0" ShadowDepth="0" Opacity="0.04" Color="Black"/>
+                        </Border.Effect>
                         <Grid>
                             <DockPanel>
                                 <TextBlock DockPanel.Dock="Left" x:Name="LockIcon" Text="" FontSize="10" FontWeight="SemiBold"
@@ -168,8 +175,8 @@
                                          KeyDown="AddressBar_KeyDown" TextChanged="AddressBar_TextChanged"
                                          GotFocus="AddressBar_GotFocus" LostFocus="AddressBar_LostFocus"/>
                             </DockPanel>
-                            <TextBlock x:Name="AddressBarPlaceholder" IsHitTestVisible="False" VerticalAlignment="Center" Margin="26,0,0,0"
-                                       Text="Search (DuckDuckGo) or type a URL" FontSize="13" Foreground="#9AA0A6" FontFamily="Segoe UI"/>
+                            <TextBlock x:Name="AddressBarPlaceholder" IsHitTestVisible="False" VerticalAlignment="Center" Margin="28,0,0,0"
+                                       Text="Search (DuckDuckGo) or type a URL" FontSize="13" Foreground="#94A3B8" FontFamily="Segoe UI"/>
                         </Grid>
                     </Border>
                     <!-- Address suggestions (visual scaffold) -->
@@ -186,11 +193,11 @@
         </Border>
 
         <!-- LOADING BAR -->
-        <ProgressBar x:Name="LoadingBar" DockPanel.Dock="Top" Height="2" Background="Transparent"
-                     Foreground="#1A73E8" IsIndeterminate="True" Visibility="Collapsed"/>
+        <ProgressBar x:Name="LoadingBar" DockPanel.Dock="Top" Height="3" Background="Transparent"
+                     Foreground="#0891B2" IsIndeterminate="True" Visibility="Collapsed"/>
 
         <!-- STATUS BAR -->
-        <Border DockPanel.Dock="Bottom" Background="#F1F3F4" Padding="14,6" BorderBrush="#DADCE0" BorderThickness="0,1,0,0">
+        <Border DockPanel.Dock="Bottom" Background="#F8FAFC" Padding="14,8" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Left" x:Name="StatusText" Text="Ready — enter a URL above to start" Foreground="#5F6368" FontSize="12" FontFamily="Segoe UI"/>
                 <TextBlock DockPanel.Dock="Right" x:Name="RequestCountText" Text="" Foreground="#5F6368" FontSize="11" FontFamily="Segoe UI"/>
@@ -206,35 +213,45 @@
                 <ColumnDefinition x:Name="SidebarCol" Width="460"/>
             </Grid.ColumnDefinitions>
 
-            <!-- WebView container -->
-            <Grid x:Name="WebViewContainer" Grid.Column="0" Background="White"/>
+            <!-- WebView container + crash overlay -->
+            <Grid Grid.Column="0">
+                <Grid x:Name="WebViewContainer" Background="White"/>
+                <Border x:Name="CrashOverlay" Visibility="Collapsed" Background="#F0F2F5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
+                        <TextBlock Text="This page crashed." FontSize="18" FontWeight="SemiBold" Foreground="#202124" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
+                        <TextBlock Text="The tab may have run out of memory or hit a bug." FontSize="12" Foreground="#5F6368" HorizontalAlignment="Center" Margin="0,8,0,16" FontFamily="Segoe UI"/>
+                        <Button x:Name="CrashReloadBtn" Content="Reload" Click="CrashReload_Click" Width="120" Height="36" FontSize="13" FontFamily="Segoe UI"
+                                Background="#0891B2" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
 
             <!-- PRIVACY SIDEBAR -->
-            <Border x:Name="SidebarPanel" Grid.Column="1" Background="#F1F3F4" BorderBrush="#DADCE0" BorderThickness="1,0,0,0">
+            <Border x:Name="SidebarPanel" Grid.Column="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1,0,0,0">
                 <DockPanel>
 
                     <!-- Sidebar header -->
-                    <Border DockPanel.Dock="Top" Background="White" Padding="16,10" BorderBrush="#DADCE0" BorderThickness="0,0,0,1">
+                    <Border DockPanel.Dock="Top" Background="White" Padding="18,12" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1">
                         <DockPanel>
                             <Button DockPanel.Dock="Right" Style="{StaticResource CNav}" Width="28" Height="28"
                                     Content="&#x2715;" FontSize="12" Click="ToggleSidebar_Click" ToolTip="Close panel"/>
                             <Button DockPanel.Dock="Right" x:Name="ExpertToggleBtn" Style="{StaticResource SecBtn}"
                                     Content="Expert" Click="ToggleExpert_Click" ToolTip="Toggle Expert/Simple view"
-                                    Margin="0,0,6,0" Height="24" Padding="10,0" FontSize="10"/>
+                                    Margin="0,0,8,0" Height="26" Padding="12,0" FontSize="10"/>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Border Width="26" Height="26" CornerRadius="13" Background="White" Margin="0,0,8,0">
+                                <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource AccentGradient}" Margin="0,0,10,0">
                                     <Border.Effect>
-                                        <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.25" Color="#2B9DF4"/>
+                                        <DropShadowEffect BlurRadius="8" ShadowDepth="0" Opacity="0.2" Color="#0891B2"/>
                                     </Border.Effect>
                                     <Image Source="pack://application:,,,/img.png" Width="18" Height="18" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
-                                <TextBlock Text="Privacy Monitor" FontSize="14" FontWeight="SemiBold" Foreground="#202124" VerticalAlignment="Center" FontFamily="Segoe UI"/>
+                                <TextBlock Text="Privacy Monitor" FontSize="15" FontWeight="SemiBold" Foreground="#0F172A" VerticalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
                         </DockPanel>
                     </Border>
 
                     <!-- Score banner -->
-                    <Border DockPanel.Dock="Top" x:Name="ScoreBanner" Background="{StaticResource HeaderGradient}" Padding="16,14">
+                    <Border DockPanel.Dock="Top" x:Name="ScoreBanner" Background="{StaticResource HeaderGradient}" Padding="18,16">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="120"/>
@@ -244,11 +261,11 @@
 
                             <!-- Circular score meter -->
                             <Grid Width="110" Height="110" Grid.Column="0">
-                                <Ellipse x:Name="ScoreRingBase" Stroke="#E4E7EC" StrokeThickness="10" Fill="Transparent"/>
+                                <Ellipse x:Name="ScoreRingBase" Stroke="#E2E8F0" StrokeThickness="10" Fill="Transparent"/>
                                 <Ellipse x:Name="ScoreRing" Stroke="{StaticResource AccentGradient}" StrokeThickness="10" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent"/>
-                                <Border Width="36" Height="36" CornerRadius="18" Background="White" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Border Width="38" Height="38" CornerRadius="19" Background="White" HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Border.Effect>
-                                        <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.25" Color="#2CB67D"/>
+                                        <DropShadowEffect BlurRadius="8" ShadowDepth="0" Opacity="0.2" Color="#0D9488"/>
                                     </Border.Effect>
                                     <Image Source="pack://application:,,,/img.png" Width="20" Height="20" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
@@ -275,15 +292,15 @@
                     </Border>
 
                     <!-- Score bar -->
-                    <Border DockPanel.Dock="Top" Padding="16,4,16,8" Background="#F8F9FA">
-                        <Grid Height="4">
-                            <Border CornerRadius="2" Background="#DADCE0"/>
-                            <Border x:Name="ScoreBarFill" CornerRadius="2" Background="#1A73E8" HorizontalAlignment="Left" Width="0"/>
+                    <Border DockPanel.Dock="Top" Padding="18,6,18,10" Background="Transparent">
+                        <Grid Height="5">
+                            <Border CornerRadius="2.5" Background="#E2E8F0"/>
+                            <Border x:Name="ScoreBarFill" CornerRadius="2.5" Background="#0891B2" HorizontalAlignment="Left" Width="0"/>
                         </Grid>
                     </Border>
 
                     <!-- Stats row -->
-                    <Border DockPanel.Dock="Top" Background="White" Padding="8,8" BorderBrush="#DADCE0" BorderThickness="0,0,0,1">
+                    <Border DockPanel.Dock="Top" Background="White" Padding="12,10" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1">
                         <UniformGrid Columns="6">
                             <StackPanel HorizontalAlignment="Center">
                                 <TextBlock x:Name="StatTotal" Text="0" FontSize="16" FontWeight="Bold" Foreground="#202124" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
@@ -437,7 +454,7 @@
                                                 <Border.Effect><DropShadowEffect BlurRadius="6" ShadowDepth="1" Opacity="0.06" Color="Black"/></Border.Effect>
                                                 <StackPanel>
                                                     <DockPanel>
-                                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Article}" FontSize="11" FontWeight="Bold" Foreground="#1A73E8" FontFamily="Segoe UI"/>
+                                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Article}" FontSize="11" FontWeight="Bold" Foreground="#0891B2" FontFamily="Segoe UI"/>
                                                         <TextBlock DockPanel.Dock="Right" Text="{Binding Count}" FontSize="10" Foreground="#9AA0A6" FontFamily="Segoe UI"/>
                                                         <TextBlock Text="{Binding Severity}" FontSize="10" FontWeight="Bold" Foreground="{Binding SeverityColor}" Margin="10,0,0,0" FontFamily="Segoe UI"/>
                                                     </DockPanel>
@@ -541,6 +558,8 @@
                             <StackPanel x:Name="Panel2" Visibility="Collapsed">
                                 <TextBlock Text="Cookies and web storage" FontSize="11" FontWeight="SemiBold" Foreground="#5F6368" Margin="2,0,0,4" FontFamily="Segoe UI"/>
                                 <TextBlock x:Name="StorageSummaryText" Text="Visit a website to see cookies and storage." FontSize="11" Foreground="#5F6368" Margin="2,0,0,8" FontFamily="Segoe UI"/>
+                                <Button x:Name="ClearSiteDataBtn" Content="Clear data for this site" Click="ClearSiteData_Click" Margin="2,0,0,8" Padding="10,6" FontSize="11" FontFamily="Segoe UI"
+                                        Background="#FEE2E2" Foreground="#B91C1C" BorderThickness="0" Cursor="Hand" ToolTip="Clear cookies, localStorage, and sessionStorage for the current site"/>
                                 <ListBox x:Name="StorageList" MaxHeight="500" BorderThickness="0" Background="Transparent">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
@@ -758,7 +777,7 @@
                                                         <TextBlock Text="{Binding Category}" FontSize="11" FontWeight="SemiBold" Foreground="#202124" FontFamily="Segoe UI"/>
                                                     </DockPanel>
                                                     <TextBlock Text="{Binding Justification}" FontSize="10" Foreground="#5F6368" TextWrapping="Wrap" Margin="0,2,0,0" FontFamily="Segoe UI"/>
-                                                    <TextBlock Text="{Binding GdprRelevance}" FontSize="9" Foreground="#1A73E8" Margin="0,2,0,0" FontFamily="Segoe UI"/>
+                                                    <TextBlock Text="{Binding GdprRelevance}" FontSize="9" Foreground="#0891B2" Margin="0,2,0,0" FontFamily="Segoe UI"/>
                                                 </StackPanel>
                                             </Border>
                                         </DataTemplate>

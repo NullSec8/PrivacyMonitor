@@ -23,6 +23,7 @@ namespace PrivacyMonitor
         public int NextRequestId;
         public bool IsReady { get; set; }
         public bool IsLoading { get; set; }
+        public bool IsCrashed { get; set; }
         public bool IsSecure { get; set; }
         public bool ConsentDetected { get; set; }
 

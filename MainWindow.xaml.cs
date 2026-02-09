@@ -25,6 +25,7 @@ namespace PrivacyMonitor
         private string _activeTabId = "";
         private int _activeAnalysisTab;
         private bool _dirty = true;
+        private long _lastDirtySetTicks; // throttle _dirty from request handler
         private bool _sidebarOpen = true;
         private bool _expertMode = false;
         private bool _antiFpEnabled = true;
@@ -41,7 +42,7 @@ namespace PrivacyMonitor
         private static readonly SolidColorBrush TabActiveFg  = new(Color.FromRgb(32, 33, 36));     // #202124
         private static readonly SolidColorBrush TabInactiveBg = new(Color.FromRgb(210, 213, 218));  // subtle
         private static readonly SolidColorBrush TabInactiveFg = new(Color.FromRgb(95, 99, 104));    // #5F6368
-        private static readonly SolidColorBrush PillActive   = new(Color.FromRgb(26, 115, 232));    // #1A73E8
+        private static readonly SolidColorBrush PillActive   = new(Color.FromRgb(8, 145, 178));   // #0891B2
         private static readonly SolidColorBrush PillActiveFg = Brushes.White;
         private static readonly SolidColorBrush PillInactive = Brushes.Transparent;
         private static readonly SolidColorBrush PillInactiveFg = new(Color.FromRgb(95, 99, 104));
@@ -50,24 +51,29 @@ namespace PrivacyMonitor
             *{margin:0;padding:0;box-sizing:border-box}
             body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#FFF;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;color:#202124}
             .logo{font-size:56px;font-weight:300;margin-bottom:8px;color:#202124}
-            .logo span{font-weight:600;color:#1A73E8}
+            .logo span{font-weight:600;color:#0891B2}
             .sub{font-size:13px;color:#5F6368;margin-bottom:32px}
             .search{width:480px;max-width:90%;height:44px;border-radius:24px;border:1px solid #DFE1E5;padding:0 20px;font-size:14px;outline:none;color:#202124;transition:box-shadow .2s}
             .search:focus{box-shadow:0 1px 6px rgba(32,33,36,.28);border-color:transparent}
             .tips{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:420px;width:100%}
             .tip{background:#F8F9FA;border-radius:12px;padding:14px 16px;font-size:12px;color:#3C4043;line-height:1.5}
-            .tip b{color:#1A73E8;display:block;margin-bottom:2px;font-size:11px}
+            .tip b{color:#0891B2;display:block;margin-bottom:2px;font-size:11px}
             .foot{position:fixed;bottom:16px;font-size:11px;color:#9AA0A6}
         </style></head><body>
             <div class='logo'>Privacy <span>Monitor</span></div>
             <div class='sub'>Agjencia per Informim dhe Privatesi</div>
-            <input class='search' placeholder='Search or type a URL' autofocus
-                   onkeydown=""if(event.key==='Enter'){let v=this.value.trim();if(v&&!v.includes('://')){v='https://'+v;}if(v)window.location.href=v;}""/>
+            <form action='https://duckduckgo.com/' method='get' target='_top' id='sf' style='display:inline;'>
+            <input class='search' name='q' placeholder='Search with DuckDuckGo or type a URL' autofocus
+                   onkeydown=""if(event.key==='Enter'){var v=this.value.trim();if(!v)return;if(v.indexOf(' ')>=0)return;if(v.indexOf('://')>=0||v.indexOf('.')>=0){event.preventDefault();if(v.indexOf('://')>=0||/^https?:\\/\\//i.test(v)||/^file:/i.test(v)){window.location.href=v}else{window.location.href='https://'+v}}}""/>
+            </form>
             <div class='tips'>
+                <div class='tip'><b>Search</b> Type a phrase or word and press Enter → opens DuckDuckGo</div>
+                <div class='tip'><b>URL</b> Type a site (e.g. google.com) and Enter → opens the site</div>
                 <div class='tip'><b>Ctrl+T</b>New Tab</div>
                 <div class='tip'><b>Ctrl+W</b>Close Tab</div>
                 <div class='tip'><b>Ctrl+L</b>Focus Address Bar</div>
                 <div class='tip'><b>F5</b>Reload Page</div>
+                <div class='tip'><b>Escape</b>Stop loading</div>
                 <div class='tip'><b>Ctrl+P</b>Print Page</div>
                 <div class='tip'><b>Ctrl+F</b>Find in Page</div>
                 <div class='tip'><b>Ctrl+/- </b>Zoom</div>
@@ -86,7 +92,53 @@ namespace PrivacyMonitor
             _uiTimer.Tick += (_, _) => { if (_dirty) { _dirty = false; RefreshAll(); } };
             _uiTimer.Start();
 
-            Loaded += async (_, _) => await CreateNewTab("about:welcome");
+            Closing += MainWindow_Closing;
+            Loaded += async (_, _) => await RestoreOrWelcomeAsync();
+        }
+
+        private static string SessionPath()
+        {
+            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PrivacyMonitor");
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            return Path.Combine(dir, "session.json");
+        }
+
+        private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+        {
+            try
+            {
+                var urls = _tabs
+                    .Select(t => t.Url?.Trim() ?? "")
+                    .Where(u => u.Length > 0 && !u.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (urls.Count == 0) urls.Add("about:welcome");
+                File.WriteAllText(SessionPath(), JsonSerializer.Serialize(urls));
+            }
+            catch { }
+        }
+
+        private async Task RestoreOrWelcomeAsync()
+        {
+            var sessionPath = SessionPath();
+            List<string>? urls = null;
+            if (File.Exists(sessionPath))
+            {
+                try
+                {
+                    var json = File.ReadAllText(sessionPath);
+                    urls = JsonSerializer.Deserialize<List<string>>(json);
+                }
+                catch { }
+            }
+            if (urls == null || urls.Count == 0)
+            {
+                await CreateNewTab("about:welcome");
+                return;
+            }
+            for (int i = 0; i < urls.Count; i++)
+            {
+                await CreateNewTab(urls[i]);
+            }
         }
 
         // ================================================================
@@ -410,6 +462,8 @@ namespace PrivacyMonitor
                 cw.WebMessageReceived += (s, e) => OnWebMessage(tab, e);
                 cw.NavigationStarting += (s, e) => OnNavigationStarting(tab, e);
                 cw.NavigationCompleted += (s, e) => OnNavigationCompleted(tab, e);
+                cw.DownloadStarting += (s, e) => OnDownloadStarting(tab, e);
+                cw.ProcessFailed += (s, e) => OnProcessFailed(tab, e);
                 cw.DocumentTitleChanged += (s, e) => Dispatcher.Invoke(() => UpdateTabTitle(tab));
                 cw.NewWindowRequested += (s, e) => { e.Handled = true; Dispatcher.Invoke(async () => await CreateNewTab(e.Uri)); };
                 await cw.AddScriptToExecuteOnDocumentCreatedAsync(ProtectionEngine.ElementBlockerBootstrapScript);
@@ -446,6 +500,8 @@ namespace PrivacyMonitor
                     UpdateLockIcon(t);
                     StatusText.Text = t.CurrentHost.Length > 0 ? t.CurrentHost : "Ready — enter a URL above to start";
                     UpdateProtectionUI(t);
+                    UpdateNavButtons();
+                    if (CrashOverlay != null) CrashOverlay.Visibility = t.IsCrashed ? Visibility.Visible : Visibility.Collapsed;
                 }
             }
             _dirty = true;
@@ -649,8 +705,10 @@ namespace PrivacyMonitor
                         AddressBar.Text = isAbout ? "" : e.Uri;
                         UpdateAddressBarPlaceholder();
                         LoadingBar.Visibility = Visibility.Visible;
+                        StatusText.Text = "Loading…";
                         UpdateLockIcon(tab);
                         UpdateProtectionUI(tab);
+                        UpdateNavButtons();
                     }
                     _dirty = true;
                 }
@@ -765,6 +823,7 @@ namespace PrivacyMonitor
                     UpdateLockIcon(tab);
                     StatusText.Text = string.IsNullOrEmpty(tab.CurrentHost) ? "Ready — enter a URL above to start" : tab.CurrentHost;
                     UpdateProtectionUI(tab);
+                    UpdateNavButtons();
                 }
             });
             if (!tab.IsReady) return;
@@ -779,6 +838,71 @@ namespace PrivacyMonitor
             try { await tab.WebView.CoreWebView2.ExecuteScriptAsync(PrivacyEngine.StorageEnumerationScript); } catch { }
             try { await tab.WebView.CoreWebView2.ExecuteScriptAsync(PrivacyEngine.WebRtcLeakScript); } catch { }
             _dirty = true;
+        }
+
+        private void OnDownloadStarting(BrowserTab tab, CoreWebView2DownloadStartingEventArgs e)
+        {
+            try
+            {
+                var op = e.DownloadOperation;
+                string downloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                if (!Directory.Exists(downloads)) Directory.CreateDirectory(downloads);
+                string? name = null;
+                try { name = Path.GetFileName(new Uri(op.Uri).LocalPath); } catch { }
+                if (string.IsNullOrEmpty(name) || name.Length < 2) name = "download";
+                foreach (char c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
+                if (string.IsNullOrEmpty(Path.GetExtension(name))) name += ".bin";
+                string path = Path.Combine(downloads, name);
+                int n = 0;
+                while (File.Exists(path))
+                    path = Path.Combine(downloads, Path.GetFileNameWithoutExtension(name) + $" ({++n})" + Path.GetExtension(name));
+                e.ResultFilePath = path;
+            }
+            catch { }
+        }
+
+        private void OnProcessFailed(BrowserTab tab, CoreWebView2ProcessFailedEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                tab.IsCrashed = true;
+                if (tab.Id == _activeTabId && CrashOverlay != null)
+                {
+                    CrashOverlay.Visibility = Visibility.Visible;
+                }
+            });
+        }
+
+        private void CrashReload_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            if (tab == null) return;
+            tab.IsCrashed = false;
+            if (CrashOverlay != null) CrashOverlay.Visibility = Visibility.Collapsed;
+            try
+            {
+                if (!string.IsNullOrEmpty(tab.Url) && !tab.Url.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
+                    tab.WebView.CoreWebView2?.Navigate(tab.Url);
+                else
+                    tab.WebView.CoreWebView2?.NavigateToString(WelcomeHtml);
+            }
+            catch { }
+        }
+
+        private void UpdateNavButtons()
+        {
+            var tab = ActiveTab;
+            try
+            {
+                var cw = tab?.WebView?.CoreWebView2;
+                if (NavBack != null) NavBack.IsEnabled = cw?.CanGoBack == true;
+                if (NavForward != null) NavForward.IsEnabled = cw?.CanGoForward == true;
+            }
+            catch
+            {
+                if (NavBack != null) NavBack.IsEnabled = false;
+                if (NavForward != null) NavForward.IsEnabled = false;
+            }
         }
 
         private static async Task ApplyRuntimeBlockerAsync(BrowserTab tab, SiteProfile profile)
@@ -899,9 +1023,15 @@ namespace PrivacyMonitor
 
                 // Enqueue for batched drain (avoids per-request Dispatcher.Invoke)
                 tab.PendingRequests.Enqueue(entry);
-                _dirty = true;
+                MarkDirtyThrottled();
             }
             catch { }
+        }
+
+        private void MarkDirtyThrottled()
+        {
+            long now = Environment.TickCount64;
+            if (now - _lastDirtySetTicks >= 300) { _dirty = true; _lastDirtySetTicks = now; }
         }
 
         private void OnWebResourceResponseReceived(BrowserTab tab, CoreWebView2WebResourceResponseReceivedEventArgs e)
@@ -931,7 +1061,7 @@ namespace PrivacyMonitor
                             break;
                         }
                     }
-                    _dirty = true;
+                    MarkDirtyThrottled();
                 });
             }
             catch { }
@@ -1004,6 +1134,7 @@ namespace PrivacyMonitor
         private void RefreshAll()
         {
             var tab = ActiveTab; if (tab == null) return;
+            _lastDirtySetTicks = Environment.TickCount64;
 
             // Drain pending requests from all tabs (batched, reduces UI thread contention)
             foreach (var t in _tabs) t.DrainPending();
@@ -1622,19 +1753,37 @@ namespace PrivacyMonitor
 
         private void Navigate()
         {
-            var tab = ActiveTab; if (tab == null || !tab.IsReady) return;
-            var input = AddressBar.Text.Trim(); if (string.IsNullOrEmpty(input)) return;
+            var tab = ActiveTab;
+            if (tab == null)
+            {
+                if (StatusText != null) StatusText.Text = "No tab — try opening a new tab.";
+                return;
+            }
+            if (!tab.IsReady)
+            {
+                if (StatusText != null) StatusText.Text = "Browser is still loading… try again in a moment.";
+                return;
+            }
+            var input = AddressBar?.Text?.Trim() ?? "";
+            if (string.IsNullOrEmpty(input))
+            {
+                if (StatusText != null) StatusText.Text = "Type a search or URL above.";
+                return;
+            }
 
             string url;
             if (LooksLikeUrl(input))
-            {
                 url = input.Contains("://") ? input : "https://" + input;
-            }
             else
-            {
                 url = SearchEngineUrl + Uri.EscapeDataString(input);
+            try
+            {
+                tab.WebView.CoreWebView2.Navigate(url);
             }
-            try { tab.WebView.CoreWebView2.Navigate(url); } catch { }
+            catch (Exception ex)
+            {
+                if (StatusText != null) StatusText.Text = "Navigation failed: " + ex.Message;
+            }
         }
 
         /// <summary>Show Find in Page bar (Ctrl+F). Uses WebView2 Find API.</summary>
@@ -1678,7 +1827,17 @@ namespace PrivacyMonitor
                         e.Handled = true; break;
                 }
             }
+            if (e.Key == Key.Enter && AddressBar != null && AddressBar.IsFocused)
+            {
+                Navigate();
+                e.Handled = true;
+            }
             if (e.Key == Key.F5) { Reload_Click(this, new RoutedEventArgs()); e.Handled = true; }
+            if (e.Key == Key.Escape)
+            {
+                var t = ActiveTab;
+                if (t?.IsLoading == true && t.WebView?.CoreWebView2 != null) { try { t.WebView.CoreWebView2.Stop(); } catch { } e.Handled = true; }
+            }
             if (Keyboard.Modifiers == ModifierKeys.Alt)
             {
                 if (e.Key == Key.Left) { Back_Click(this, new RoutedEventArgs()); e.Handled = true; }
@@ -1698,6 +1857,39 @@ namespace PrivacyMonitor
                 _panels[i].Visibility = i == idx ? Visibility.Visible : Visibility.Collapsed;
                 _aTabButtons[i].Background = i == idx ? PillActive : PillInactive;
                 _aTabButtons[i].Foreground = i == idx ? PillActiveFg : PillInactiveFg;
+            }
+        }
+
+        private async void ClearSiteData_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            if (tab?.IsReady != true || string.IsNullOrEmpty(tab.CurrentHost)) return;
+            try
+            {
+                const string clearScript = @"
+(function(){
+ try { if (typeof localStorage !== 'undefined') localStorage.clear(); } catch(e){}
+ try { if (typeof sessionStorage !== 'undefined') sessionStorage.clear(); } catch(e){}
+ try {
+   var c = document.cookie.split(';');
+   for (var i = 0; i < c.length; i++) {
+     var name = c[i].split('=')[0].trim();
+     document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+     document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + window.location.hostname;
+   }
+ } catch(e){}
+})();
+";
+                await tab.WebView.CoreWebView2.ExecuteScriptAsync(clearScript);
+                tab.Cookies.Clear();
+                tab.Storage.Clear();
+                try { await tab.WebView.CoreWebView2.ExecuteScriptAsync(PrivacyEngine.StorageEnumerationScript); } catch { }
+                _dirty = true;
+                if (StatusText != null) StatusText.Text = "Cleared cookies and storage for this site.";
+            }
+            catch (Exception ex)
+            {
+                if (StatusText != null) StatusText.Text = "Clear failed: " + ex.Message;
             }
         }
 

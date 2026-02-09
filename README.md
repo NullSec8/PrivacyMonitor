@@ -4,7 +4,7 @@ A Windows desktop browser built with WPF and **WebView2** that monitors and prot
 
 ## What it does
 
-- **Browse** — Chrome-style tabs, address bar, back/forward/reload. Each tab embeds a full Chromium-based WebView2.
+- **Browse** — Chrome-style tabs, address bar, back/forward/reload. Each tab embeds a full Chromium-based WebView2. Downloads go to your **Downloads** folder. **Escape** stops loading; Back/Forward are disabled when there is no history.
 - **Privacy score (0–100)** — One score per page: fewer trackers and risks mean a higher score and a letter grade (e.g. A/B/C/D/F).
 - **Tracker detection** — Database of ~220 known services (Google, Meta, Adobe, Hotjar, Segment, etc.). Classifies requests as first-party, third-party, or known tracker with confidence.
 - **Protection modes** (per site):
