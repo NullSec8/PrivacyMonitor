@@ -203,6 +203,13 @@ namespace PrivacyMonitor
         public DateTime Added { get; set; } = DateTime.UtcNow;
     }
 
+    public class AppSettings
+    {
+        public string HomePage { get; set; } = "about:welcome";
+        public string Startup { get; set; } = "restore"; // "welcome" | "restore"
+        public string SearchEngineUrl { get; set; } = "https://duckduckgo.com/?q=";
+    }
+
     public class PrivacyScore
     {
         public int NumericScore { get; set; }

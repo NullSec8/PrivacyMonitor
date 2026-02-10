@@ -33,61 +33,68 @@ namespace PrivacyMonitor
         private readonly DispatcherTimer _uiTimer;
         private readonly SessionContext _session = new();
         private List<BookmarkEntry> _bookmarks = new();
-        private List<(string Title, string Url)> _recentUrls = new();
-        private const int MaxRecent = 10;
+        private AppSettings _settings = new();
+        private readonly bool _isPrivate;
+        private List<(string Title, string Url, DateTime Visited)> _recentUrls = new();
+        private const int MaxRecent = 50;
 
         private Button[] _aTabButtons = Array.Empty<Button>();
         private UIElement[] _panels = Array.Empty<UIElement>();
 
-        // Chrome palette
-        private static readonly SolidColorBrush TabBarBg     = new(Color.FromRgb(222, 225, 230)); // #DEE1E6
-        private static readonly SolidColorBrush TabActiveBg  = Brushes.White;
-        private static readonly SolidColorBrush TabActiveFg  = new(Color.FromRgb(15, 23, 42));     // #0F172A
-        private static readonly SolidColorBrush TabInactiveBg = new(Color.FromRgb(226, 232, 240));  // #E2E8F0
-        private static readonly SolidColorBrush TabInactiveFg = new(Color.FromRgb(71, 85, 105));    // #475569
-        private static readonly SolidColorBrush PillActive   = new(Color.FromRgb(8, 145, 178));   // #0891B2
-        private static readonly SolidColorBrush PillActiveFg = Brushes.White;
-        private static readonly SolidColorBrush PillInactive = Brushes.Transparent;
-        private static readonly SolidColorBrush PillInactiveFg = new(Color.FromRgb(95, 99, 104));
+        // Chrome palette (theme-aware; set in ApplyTheme)
+        private SolidColorBrush TabBarBg = new(Color.FromRgb(222, 225, 230));
+        private SolidColorBrush TabActiveBg = Brushes.White;
+        private SolidColorBrush TabActiveFg = new(Color.FromRgb(15, 23, 42));
+        private SolidColorBrush TabInactiveBg = new(Color.FromRgb(226, 232, 240));
+        private SolidColorBrush TabInactiveFg = new(Color.FromRgb(71, 85, 105));
+        private SolidColorBrush PillActive = new(Color.FromRgb(8, 145, 178));
+        private SolidColorBrush PillActiveFg = Brushes.White;
+        private SolidColorBrush PillInactive = Brushes.Transparent;
+        private SolidColorBrush PillInactiveFg = new(Color.FromRgb(95, 99, 104));
+        private bool _isDarkTheme;
 
-        private static readonly string WelcomeHtml = @"<!DOCTYPE html><html><head><style>
+        private static readonly string WelcomeHtml = @"<!DOCTYPE html><html><head><meta name='color-scheme' content='light dark'/><meta charset='utf-8'/><style>
             *{margin:0;padding:0;box-sizing:border-box}
-            body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#FFF;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;color:#202124}
-            .logo{font-size:56px;font-weight:300;margin-bottom:8px;color:#202124}
-            .logo span{font-weight:600;color:#0891B2}
-            .sub{font-size:13px;color:#5F6368;margin-bottom:32px}
-            .search{width:480px;max-width:90%;height:44px;border-radius:24px;border:1px solid #DFE1E5;padding:0 20px;font-size:14px;outline:none;color:#202124;transition:box-shadow .2s}
-            .search:focus{box-shadow:0 1px 6px rgba(32,33,36,.28);border-color:transparent}
-            .tips{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:420px;width:100%}
-            .tip{background:#F8F9FA;border-radius:12px;padding:14px 16px;font-size:12px;color:#3C4043;line-height:1.5}
-            .tip b{color:#0891B2;display:block;margin-bottom:2px;font-size:11px}
-            .foot{position:fixed;bottom:16px;font-size:11px;color:#9AA0A6}
-            .recent{margin-top:24px;font-size:12px;color:#5F6368;width:480px;max-width:90%}
-            .recent a{color:#0891B2;text-decoration:none}
-            .recent a:hover{text-decoration:underline}
-            .recent ul{list-style:none;margin-top:8px;text-align:left}
-            .recent li{margin:6px 0;padding:4px 0;border-bottom:1px solid #eee}
+            :root{--bg:#fff;--text:#202124;--text-muted:#5F6368;--accent:#0891B2;--tip-bg:#F8F9FA;--search-border:#DFE1E5;--border:#E2E8F0;--foot:#9AA0A6}
+            @media(prefers-color-scheme:dark){:root{--bg:#202124;--text:#E8EAED;--text-muted:#9AA0A6;--accent:#5EB8D9;--tip-bg:#35363A;--search-border:#5F6368;--border:#3C4043;--foot:#80868B}}
+            body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;transition:background .2s,color .2s}
+            .hero{margin-bottom:40px;text-align:center}
+            .logo{font-size:48px;font-weight:200;letter-spacing:-1px;color:var(--text);margin-bottom:6px}
+            .logo span{font-weight:600;color:var(--accent)}
+            .sub{font-size:13px;color:var(--text-muted);letter-spacing:.3px}
+            .search-wrap{margin:32px 0 48px 0}
+            .search{width:520px;max-width:95%;height:48px;border-radius:24px;border:1px solid var(--search-border);background:var(--tip-bg);padding:0 24px;font-size:15px;outline:none;color:var(--text);transition:box-shadow .2s,border-color .2s;display:block}
+            .search::placeholder{color:var(--text-muted)}
+            .search:focus{box-shadow:0 2px 12px rgba(0,0,0,.12);border-color:var(--accent)}
+            .tips{margin:0 auto;display:grid;grid-template-columns:repeat(2,1fr);gap:14px;max-width:460px}
+            .tip{background:var(--tip-bg);border-radius:14px;padding:16px 18px;font-size:12px;color:var(--text);line-height:1.5;border:1px solid var(--border);transition:border-color .15s}
+            .tip:hover{border-color:var(--accent)}
+            .tip b{color:var(--accent);display:block;margin-bottom:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+            .foot{position:fixed;bottom:20px;font-size:11px;color:var(--foot)}
         </style></head><body>
-            <div class='logo'>Privacy <span>Monitor</span></div>
-            <div class='sub'>Agjencia per Informim dhe Privatesi</div>
-            <form action='https://duckduckgo.com/' method='get' target='_top' id='sf' style='display:inline;'>
-            <input class='search' name='q' placeholder='Search with DuckDuckGo or type a URL' autofocus
-                   onkeydown=""if(event.key==='Enter'){var v=this.value.trim();if(!v)return;if(v.indexOf(' ')>=0)return;if(v.indexOf('://')>=0||v.indexOf('.')>=0){event.preventDefault();if(v.indexOf('://')>=0||/^https?:\\/\\//i.test(v)||/^file:/i.test(v)){window.location.href=v}else{window.location.href='https://'+v}}}""/>
-            </form>
-            {{RECENT}}
-            <div class='tips'>
-                <div class='tip'><b>Search</b> Type a phrase or word and press Enter → opens DuckDuckGo</div>
-                <div class='tip'><b>URL</b> Type a site (e.g. google.com) and Enter → opens the site</div>
-                <div class='tip'><b>Ctrl+T</b>New Tab</div>
-                <div class='tip'><b>Ctrl+W</b>Close Tab</div>
-                <div class='tip'><b>Ctrl+L</b>Focus Address Bar</div>
-                <div class='tip'><b>F5</b>Reload Page</div>
-                <div class='tip'><b>Escape</b>Stop loading</div>
-                <div class='tip'><b>Ctrl+P</b>Print Page</div>
-                <div class='tip'><b>Ctrl+F</b>Find in Page</div>
-                <div class='tip'><b>Ctrl+/- </b>Zoom</div>
+            <div class='hero'>
+                <div class='logo'>Privacy <span>Monitor</span></div>
+                <div class='sub'>Agjencia per Informim dhe Privatesi</div>
             </div>
-            <div class='foot'>Privacy Monitor v1.0 &middot; Built for Windows</div>
+            <div class='search-wrap'>
+                <form action='https://duckduckgo.com/' method='get' target='_top' id='sf'>
+                <input class='search' name='q' placeholder='Search with DuckDuckGo or type a URL' autofocus
+                       onkeydown=""if(event.key==='Enter'){var v=this.value.trim();if(!v)return;if(v.indexOf(' ')>=0)return;if(v.indexOf('://')>=0||v.indexOf('.')>=0){event.preventDefault();if(v.indexOf('://')>=0||/^https?:\\/\\//i.test(v)||/^file:/i.test(v)){window.location.href=v}else{window.location.href='https://'+v}}}""/>
+                </form>
+            </div>
+            <div class='tips'>
+                <div class='tip'><b>Search</b> Type a phrase and press Enter → opens DuckDuckGo</div>
+                <div class='tip'><b>URL</b> Type a site (e.g. google.com) and Enter → opens it</div>
+                <div class='tip'><b>Ctrl+T</b> New tab</div>
+                <div class='tip'><b>Ctrl+W</b> Close tab</div>
+                <div class='tip'><b>Ctrl+L</b> Focus address bar</div>
+                <div class='tip'><b>F5</b> Reload page</div>
+                <div class='tip'><b>Escape</b> Stop loading</div>
+                <div class='tip'><b>Ctrl+P</b> Print</div>
+                <div class='tip'><b>Ctrl+F</b> Find in page</div>
+                <div class='tip'><b>Ctrl+H</b> History</div>
+            </div>
+            <div class='foot'>Privacy Monitor v1.0 · Built for Windows</div>
         </body></html>";
 
         private static string EscapeHtml(string s)
@@ -96,21 +103,155 @@ namespace PrivacyMonitor
             return s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
         }
 
-        private string GetWelcomeHtml()
+        private string GetWelcomeHtml() => WelcomeHtml;
+
+        private static readonly string HistoryPageCss = @"*{margin:0;padding:0;box-sizing:border-box}
+            :root{--bg:#fff;--text:#202124;--text-muted:#5F6368;--accent:#0891B2;--tip-bg:#F8F9FA;--search-border:#DFE1E5;--border:#E2E8F0;--card-bg:#FAFAFA}
+            @media(prefers-color-scheme:dark){:root{--bg:#202124;--text:#E8EAED;--text-muted:#9AA0A6;--accent:#5EB8D9;--tip-bg:#35363A;--search-border:#5F6368;--border:#3C4043;--card-bg:#2D2D2D}}
+            body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:28px 24px}
+            .header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:24px;flex-wrap:wrap}
+            .header h1{font-size:28px;font-weight:600;color:var(--text);letter-spacing:-0.5px}
+            .header-links{display:flex;gap:16px;align-items:center}
+            .header a{color:var(--accent);text-decoration:none;font-size:14px;font-weight:500}
+            .header a:hover{text-decoration:underline}
+            .header a.danger{color:#D93025}
+            @media(prefers-color-scheme:dark){.header a.danger{color:#EA4335}}
+            .btn-danger{background:#D93025;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit}
+            .btn-danger:hover{background:#B71C1C}
+            @media(prefers-color-scheme:dark){.btn-danger{background:#EA4335}.btn-danger:hover{background:#D93025}}
+            .search-wrap{margin-bottom:20px}
+            .search{width:100%;max-width:420px;height:44px;border-radius:22px;border:1px solid var(--search-border);background:var(--tip-bg);padding:0 20px;font-size:14px;color:var(--text);outline:none;transition:border-color .2s}
+            .search:focus{border-color:var(--accent)}
+            .search::placeholder{color:var(--text-muted)}
+            .section{margin-top:28px}
+            .section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:10px}
+            .list{max-width:680px}
+            .list ul{list-style:none}
+            .list li{margin:0 0 8px 0;padding:14px 16px;border-radius:12px;background:var(--card-bg);border:1px solid var(--border);display:flex;flex-direction:column;gap:4px;transition:background .15s}
+            .list li:hover{background:var(--tip-bg)}
+            .list li.hide{display:none}
+            .list .row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+            .list a{color:var(--accent);text-decoration:none;font-size:15px;font-weight:500;flex:1;min-width:0}
+            .list a:hover{text-decoration:underline}
+            .list .url{font-size:12px;color:var(--text-muted);word-break:break-all}
+            .list .time{font-size:11px;color:var(--text-muted);white-space:nowrap;flex-shrink:0}
+            .empty{color:var(--text-muted);margin-top:24px;font-size:15px;line-height:1.5}";
+
+        private static string FormatVisitedTime(DateTime utc)
         {
-            string recentSection = "";
-            if (_recentUrls.Count > 0)
+            var local = utc.ToLocalTime();
+            var now = DateTime.Now;
+            var d = local.Date;
+            var today = now.Date;
+            if (d == today) return "Today";
+            if (d == today.AddDays(-1)) return "Yesterday";
+            if (now - local < TimeSpan.FromDays(7)) return local.ToString("dddd");
+            return local.ToString("MMM d", System.Globalization.CultureInfo.CurrentUICulture);
+        }
+
+        private string GetHistoryHtml()
+        {
+            var sb = new StringBuilder();
+            sb.Append("<!DOCTYPE html><html><head><meta name='color-scheme' content='light dark'/><meta charset='utf-8'/><title>History</title><style>");
+            sb.Append(HistoryPageCss);
+            sb.Append("</style></head><body><div class='header'><h1>History</h1><div class='header-links'><a href='about:welcome'>New tab</a> <span style='color:var(--text-muted)'>|</span> <button type='button' id='clearHistory' class='btn-danger'>Clear history</button></div></div>");
+            sb.Append("<div class='search-wrap'><input type='text' class='search' id='q' placeholder='Search history' autofocus/></div>");
+            sb.Append("<div class='section'><div class='section-title'>Browsing history</div><div class='list'><ul id='list'>");
+            foreach (var (title, url, visited) in _recentUrls)
             {
-                var sb = new StringBuilder();
-                sb.Append("<div class='recent'><b>Recently visited</b><ul>");
-                foreach (var (title, url) in _recentUrls.Take(8))
-                {
-                    sb.Append("<li><a href='").Append(EscapeHtml(url)).Append("'>").Append(EscapeHtml(title.Length > 0 ? title : url)).Append("</a></li>");
-                }
-                sb.Append("</ul></div>");
-                recentSection = sb.ToString();
+                var t = EscapeHtml(title.Length > 0 ? title : url).Replace("'", "&#39;");
+                var u = EscapeHtml(url).Replace("'", "&#39;");
+                var timeStr = EscapeHtml(FormatVisitedTime(visited)).Replace("'", "&#39;");
+                sb.Append("<li data-title='").Append(t).Append("' data-url='").Append(u).Append("'>");
+                sb.Append("<div class='row'><a href='").Append(u).Append("'>").Append(t).Append("</a><span class='time'>").Append(timeStr).Append("</span></div>");
+                sb.Append("<span class='url'>").Append(u).Append("</span></li>");
             }
-            return WelcomeHtml.Replace("{{RECENT}}", recentSection);
+            sb.Append("</ul></div></div>");
+            if (_recentUrls.Count == 0)
+                sb.Append("<p class='empty'>No history yet. Browse the web to see visited pages here.</p>");
+            sb.Append(@"<script>
+                var q=document.getElementById('q'),list=document.getElementById('list');
+                if(list){
+                    var items=list.getElementsByTagName('li');
+                    q.oninput=function(){
+                        var v=this.value.toLowerCase();
+                        for(var i=0;i<items.length;i++){
+                            var li=items[i];
+                            li.classList.toggle('hide',v&&(li.getAttribute('data-title').toLowerCase().indexOf(v)<0&&li.getAttribute('data-url').toLowerCase().indexOf(v)<0));
+                        }
+                    };
+                }
+                var clearBtn=document.getElementById('clearHistory');
+                if(clearBtn){ clearBtn.onclick=function(){ try{ var w=window.chrome&&window.chrome.webview; if(w) w.postMessage(JSON.stringify({cat:'clearHistory'})); }catch(e){} }; }
+            </script></body></html>");
+            return sb.ToString();
+        }
+
+        private string GetSettingsHtml()
+        {
+            string home = EscapeHtml(_settings.HomePage ?? "about:welcome");
+            string startup = EscapeHtml(_settings.Startup ?? "restore");
+            string search = EscapeHtml(_settings.SearchEngineUrl ?? "https://duckduckgo.com/?q=");
+            return $@"<!DOCTYPE html><html><head><meta name='color-scheme' content='light dark'/><meta charset='utf-8'/><title>Settings</title><style>
+            *{{margin:0;padding:0;box-sizing:border-box}}
+            :root{{--bg:#fff;--text:#202124;--muted:#5F6368;--accent:#0891B2;--border:#E2E8F0}}
+            @media(prefers-color-scheme:dark){{:root{{--bg:#202124;--text:#E8EAED;--muted:#9AA0A6;--accent:#5EB8D9;--border:#3C4043}}}}
+            body{{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);padding:24px;line-height:1.5}}
+            .header{{margin-bottom:20px}}
+            .header h1{{font-size:20px;font-weight:600}}
+            .section{{margin:16px 0}}
+            .section label{{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}}
+            .section input{{width:100%;max-width:400px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px}}
+            .section select{{padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px}}
+            .btn{{margin-top:16px;padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px}}
+            .btn:hover{{opacity:0.9}}
+            #msg{{margin-top:12px;font-size:12px;color:var(--muted)}}
+            </style></head><body>
+            <div class='header'><h1>Settings</h1><p style='font-size:12px;color:var(--muted);margin-top:4px'>Privacy Monitor preferences</p></div>
+            <div class='section'><label>Home page (URL or about:welcome)</label><input type='text' id='homePage' value='{home}'/></div>
+            <div class='section'><label>On startup</label><select id='startup'><option value='restore'{ (startup == "restore" ? " selected" : "") }>Restore previous session</option><option value='welcome'{ (startup == "welcome" ? " selected" : "") }>Open welcome page</option></select></div>
+            <div class='section'><label>Search engine URL (use %s for query, or e.g. https://duckduckgo.com/?q=)</label><input type='text' id='searchEngineUrl' value='{search}'/></div>
+            <button class='btn' id='save'>Save</button>
+            <div id='msg'></div>
+            <script>
+            (function(){{
+                var home=document.getElementById('homePage'), start=document.getElementById('startup'), search=document.getElementById('searchEngineUrl'), save=document.getElementById('save'), msg=document.getElementById('msg');
+                save.onclick=function(){{
+                    var hp=home.value.trim()||'about:welcome', st=start.value, se=search.value.trim()||'https://duckduckgo.com/?q=';
+                    if(window.chrome&&window.chrome.webview) window.chrome.webview.postMessage(JSON.stringify({{cat:'settings',homePage:hp,startup:st,searchEngineUrl:se}}));
+                    msg.textContent='Saved. Restart or open a new tab to apply.';
+                }};
+            }})();
+            </script></body></html>";
+        }
+
+        private static string GetShortcutsHtml()
+        {
+            return @"<!DOCTYPE html><html><head><meta name='color-scheme' content='light dark'/><meta charset='utf-8'/><title>Keyboard shortcuts</title><style>
+            *{margin:0;padding:0;box-sizing:border-box}
+            :root{--bg:#fff;--text:#202124;--muted:#5F6368;--accent:#0891B2;--border:#E2E8F0}
+            @media(prefers-color-scheme:dark){:root{--bg:#202124;--text:#E8EAED;--muted:#9AA0A6;--accent:#5EB8D9;--border:#3C4043}}
+            body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);padding:24px}
+            h1{font-size:20px;margin-bottom:16px}
+            table{width:100%;max-width:500px;border-collapse:collapse}
+            th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)}
+            th{font-size:11px;color:var(--muted);text-transform:uppercase}
+            kbd{background:var(--border);padding:2px 6px;border-radius:4px;font-size:12px}
+            </style></head><body>
+            <h1>Keyboard shortcuts</h1>
+            <table><tr><th>Shortcut</th><th>Action</th></tr>
+            <tr><td><kbd>Ctrl+T</kbd></td><td>New tab</td></tr>
+            <tr><td><kbd>Ctrl+W</kbd></td><td>Close tab</td></tr>
+            <tr><td><kbd>Ctrl+H</kbd></td><td>History</td></tr>
+            <tr><td><kbd>Ctrl+L</kbd></td><td>Focus address bar</td></tr>
+            <tr><td><kbd>Ctrl+F</kbd></td><td>Find in page</td></tr>
+            <tr><td><kbd>F5</kbd></td><td>Reload</td></tr>
+            <tr><td><kbd>Ctrl++</kbd> / <kbd>Ctrl+-</kbd></td><td>Zoom in / out</td></tr>
+            <tr><td><kbd>Ctrl+0</kbd></td><td>Reset zoom</td></tr>
+            <tr><td><kbd>Ctrl+P</kbd></td><td>Print</td></tr>
+            <tr><td><kbd>Ctrl+Tab</kbd></td><td>Next tab</td></tr>
+            <tr><td><kbd>Ctrl+Shift+Tab</kbd></td><td>Previous tab</td></tr>
+            </table></body></html>";
         }
 
         public MainWindow()
@@ -119,7 +260,13 @@ namespace PrivacyMonitor
             _aTabButtons = new[] { ATab0, ATab1, ATab2, ATab3, ATab4, ATab5, ATab6 };
             _panels = new UIElement[] { Panel0, Panel1, Panel2, Panel3, Panel4, Panel5, Panel6 };
             SwitchAnalysisTab(0);
-            Loaded += (_, _) => UpdateExpertVisibility(); // apply simple view by default
+            Loaded += (_, _) =>
+            {
+                UpdateExpertVisibility(); // apply simple view by default
+                ApplyTheme(SystemThemeDetector.IsDarkMode);
+                SetProtectionMenuChecked(ProtectionEngine.GlobalDefaultMode); // sync pill + menu with default
+                SystemThemeDetector.ThemeChanged += OnSystemThemeChanged;
+            };
 
             _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             _uiTimer.Tick += (_, _) => { if (_dirty) { _dirty = false; RefreshAll(); } };
@@ -128,7 +275,18 @@ namespace PrivacyMonitor
             Closing += MainWindow_Closing;
             LoadBookmarks();
             LoadRecent();
+            LoadSettings();
             Loaded += async (_, _) => await RestoreOrWelcomeAsync();
+        }
+
+        public MainWindow(bool isPrivate) : this()
+        {
+            _isPrivate = isPrivate;
+            if (isPrivate && PrivateModeIndicator != null)
+            {
+                PrivateModeIndicator.Visibility = Visibility.Visible;
+                if (TabBarBorder != null) TabBarBorder.Background = new SolidColorBrush(Color.FromRgb(0x5C, 0x4D, 0x7A)); // purple tint for private
+            }
         }
 
         private static string AppDataDir()
@@ -140,6 +298,20 @@ namespace PrivacyMonitor
         private static string SessionPath() => Path.Combine(AppDataDir(), "session.json");
         private static string BookmarksPath() => Path.Combine(AppDataDir(), "bookmarks.json");
         private static string RecentPath() => Path.Combine(AppDataDir(), "recent.json");
+        private static string SettingsPath() => Path.Combine(AppDataDir(), "settings.json");
+        private void LoadSettings()
+        {
+            try
+            {
+                if (File.Exists(SettingsPath()))
+                    _settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath())) ?? new AppSettings();
+            }
+            catch { _settings = new AppSettings(); }
+        }
+        private void SaveSettings()
+        {
+            try { File.WriteAllText(SettingsPath(), JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true })); } catch { }
+        }
 
         private void LoadBookmarks()
         {
@@ -161,22 +333,36 @@ namespace PrivacyMonitor
                 if (File.Exists(RecentPath()))
                 {
                     var raw = JsonSerializer.Deserialize<List<JsonElement>>(File.ReadAllText(RecentPath()));
-                    _recentUrls = (raw ?? new List<JsonElement>()).Select(e => (e.GetProperty("Title").GetString() ?? "", e.GetProperty("Url").GetString() ?? "")).Where(t => t.Item2.Length > 0).Take(MaxRecent).ToList();
+                    _recentUrls = (raw ?? new List<JsonElement>()).Select(e =>
+                {
+                    var title = e.GetProperty("Title").GetString() ?? "";
+                    var url = e.GetProperty("Url").GetString() ?? "";
+                    var visited = DateTime.UtcNow;
+                    try { if (e.TryGetProperty("Visited", out var v)) visited = DateTime.Parse(v.GetString() ?? "", null, System.Globalization.DateTimeStyles.RoundtripKind); } catch { }
+                    return (title, url, visited);
+                }).Where(t => t.Item2.Length > 0).Take(MaxRecent).ToList();
                 }
             }
-            catch { _recentUrls = new List<(string, string)>(); }
+            catch { _recentUrls = new List<(string, string, DateTime)>(); }
         }
         private void AddRecent(string title, string url)
         {
+            if (_isPrivate) return;
             if (string.IsNullOrWhiteSpace(url) || url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)) return;
             _recentUrls.RemoveAll(t => string.Equals(t.Url, url, StringComparison.OrdinalIgnoreCase));
-            _recentUrls.Insert(0, (title.Length > 50 ? title.Substring(0, 50) + "…" : title, url));
+            _recentUrls.Insert(0, (title.Length > 50 ? title.Substring(0, 50) + "…" : title, url, DateTime.UtcNow));
             while (_recentUrls.Count > MaxRecent) _recentUrls.RemoveAt(_recentUrls.Count - 1);
-            try { File.WriteAllText(RecentPath(), JsonSerializer.Serialize(_recentUrls.Select(t => new { Title = t.Title, Url = t.Url }))); } catch { }
+            try { File.WriteAllText(RecentPath(), JsonSerializer.Serialize(_recentUrls.Select(t => new { t.Title, t.Url, Visited = t.Visited.ToString("O") }))); } catch { }
+        }
+        private void SaveRecent()
+        {
+            try { File.WriteAllText(RecentPath(), JsonSerializer.Serialize(_recentUrls.Select(t => new { t.Title, t.Url, Visited = t.Visited.ToString("O") }))); } catch { }
         }
 
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
+            SystemThemeDetector.ThemeChanged -= OnSystemThemeChanged;
+            if (_isPrivate) return;
             try
             {
                 var urls = _tabs
@@ -191,6 +377,11 @@ namespace PrivacyMonitor
 
         private async Task RestoreOrWelcomeAsync()
         {
+            if (_isPrivate || string.Equals(_settings.Startup, "welcome", StringComparison.OrdinalIgnoreCase))
+            {
+                await CreateNewTab("about:welcome");
+                return;
+            }
             var sessionPath = SessionPath();
             List<string>? urls = null;
             if (File.Exists(sessionPath))
@@ -221,6 +412,57 @@ namespace PrivacyMonitor
             _sidebarOpen = !_sidebarOpen;
             SidebarCol.Width = _sidebarOpen ? new GridLength(460) : new GridLength(0);
             SidebarPanel.Visibility = _sidebarOpen ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void OnSystemThemeChanged(object? sender, EventArgs e)
+        {
+            Dispatcher.Invoke(() => ApplyTheme(SystemThemeDetector.IsDarkMode));
+        }
+
+        /// <summary>Apply light or dark theme: update tab palette and WebView2 preferred color scheme.</summary>
+        private void ApplyTheme(bool isDark)
+        {
+            _isDarkTheme = isDark;
+            // Tab bar and tab header palette
+            TabBarBg = new SolidColorBrush(isDark ? Color.FromRgb(41, 42, 45) : Color.FromRgb(232, 236, 241));
+            TabActiveBg = new SolidColorBrush(isDark ? Color.FromRgb(53, 54, 58) : Colors.White);
+            TabActiveFg = new SolidColorBrush(isDark ? Color.FromRgb(232, 234, 237) : Color.FromRgb(15, 23, 42));
+            TabInactiveBg = new SolidColorBrush(isDark ? Color.FromRgb(41, 42, 45) : Color.FromRgb(226, 232, 240));
+            TabInactiveFg = new SolidColorBrush(isDark ? Color.FromRgb(154, 160, 166) : Color.FromRgb(71, 85, 105));
+            PillActive = new SolidColorBrush(isDark ? Color.FromRgb(94, 184, 217) : Color.FromRgb(8, 145, 178));
+            PillActiveFg = Brushes.White;
+            PillInactive = Brushes.Transparent;
+            PillInactiveFg = new SolidColorBrush(isDark ? Color.FromRgb(154, 160, 166) : Color.FromRgb(95, 99, 104));
+
+            // Refresh all tab headers so they use the new brushes
+            foreach (var t in _tabs)
+                StyleTabHeader(t, t.Id == _activeTabId);
+
+            // Native Windows title bar: dark when dark theme (Chrome-like)
+            TrySetTitleBarDarkMode(isDark);
+
+            // WebView2: set preferred color scheme so web content gets prefers-color-scheme: dark/light
+            foreach (var tab in _tabs)
+                SetWebView2ColorScheme(tab, isDark);
+
+            // Address bar focus brush when not focused (in case we're re-applying)
+            if (AddressBarBorder != null && !AddressBar.IsFocused)
+            {
+                AddressBarBorder.BorderBrush = new SolidColorBrush(isDark ? Color.FromRgb(95, 99, 104) : Color.FromRgb(226, 232, 240));
+                AddressBarBorder.BorderThickness = new Thickness(1);
+                AddressBarBorder.Effect = null;
+            }
+        }
+
+        private void SetWebView2ColorScheme(BrowserTab tab, bool preferDark)
+        {
+            try
+            {
+                var cw = tab.WebView?.CoreWebView2;
+                if (cw?.Profile == null) return;
+                cw.Profile.PreferredColorScheme = preferDark ? CoreWebView2PreferredColorScheme.Dark : CoreWebView2PreferredColorScheme.Light;
+            }
+            catch { }
         }
 
         private void ToggleExpert_Click(object sender, RoutedEventArgs e)
@@ -257,29 +499,42 @@ namespace PrivacyMonitor
         }
 
         // ================================================================
-        //  PROTECTION CONTROLS
+        //  PROTECTION CONTROLS (via app menu)
         // ================================================================
-        private void ProtectionMode_Changed(object sender, SelectionChangedEventArgs e)
+        private void MenuProtection_Click(object sender, RoutedEventArgs e)
         {
-            ApplyProtectionModeFromCombo();
-        }
-
-        private void ProtectionMode_DropDownClosed(object sender, EventArgs e)
-        {
-            // Apply again when dropdown closes so we definitely catch the user's choice
-            ApplyProtectionModeFromCombo();
-        }
-
-        private void ApplyProtectionModeFromCombo()
-        {
-            if (ProtectionModeCombo == null) return;
-            int idx = ProtectionModeCombo.SelectedIndex;
-            if (idx < 0 || idx > 2) return;
+            if (sender is not System.Windows.Controls.MenuItem mi || mi.Tag == null) return;
+            if (!int.TryParse(mi.Tag.ToString(), out int idx) || idx < 0 || idx > 2) return;
             var mode = (ProtectionMode)idx;
+            SetProtectionMenuChecked(mode);
+            ApplyProtectionMode(mode);
+        }
 
-            // Apply globally so new tabs/sites get this mode
+        private void SetProtectionMenuChecked(ProtectionMode mode)
+        {
+            if (ProtectionMonitorItem != null) ProtectionMonitorItem.IsChecked = mode == ProtectionMode.Monitor;
+            if (ProtectionBlockItem != null) ProtectionBlockItem.IsChecked = mode == ProtectionMode.BlockKnown;
+            if (ProtectionAggressiveItem != null) ProtectionAggressiveItem.IsChecked = mode == ProtectionMode.Aggressive;
+            if (PillProtectionMonitor != null) PillProtectionMonitor.IsChecked = mode == ProtectionMode.Monitor;
+            if (PillProtectionBlock != null) PillProtectionBlock.IsChecked = mode == ProtectionMode.BlockKnown;
+            if (PillProtectionAggressive != null) PillProtectionAggressive.IsChecked = mode == ProtectionMode.Aggressive;
+            if (ProtectionPillText != null)
+                ProtectionPillText.Text = mode == ProtectionMode.Monitor ? "Monitor only" : mode == ProtectionMode.BlockKnown ? "Block known" : "Aggressive";
+        }
+
+        private void ProtectionPillBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (ProtectionPillBtn != null && ProtectionPillMenu != null)
+            {
+                ProtectionPillMenu.PlacementTarget = ProtectionPillBtn;
+                ProtectionPillMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+                ProtectionPillMenu.IsOpen = true;
+            }
+        }
+
+        private void ApplyProtectionMode(ProtectionMode mode)
+        {
             ProtectionEngine.GlobalDefaultMode = mode;
-
             var tab = ActiveTab;
             if (tab != null)
             {
@@ -326,13 +581,7 @@ namespace PrivacyMonitor
         private void UpdateProtectionUI(BrowserTab tab)
         {
             var mode = ProtectionEngine.GetEffectiveMode(tab.CurrentHost);
-            // Only update combo when it would change, to avoid overwriting user's selection
-            if (ProtectionModeCombo.SelectedIndex != (int)mode)
-            {
-                ProtectionModeCombo.SelectionChanged -= ProtectionMode_Changed;
-                ProtectionModeCombo.SelectedIndex = (int)mode;
-                ProtectionModeCombo.SelectionChanged += ProtectionMode_Changed;
-            }
+            SetProtectionMenuChecked(mode);
 
             // Update per-site toggles
             var profile = ProtectionEngine.GetProfile(tab.CurrentHost);
@@ -545,8 +794,16 @@ namespace PrivacyMonitor
                 cw.NewWindowRequested += (s, e) => { e.Handled = true; Dispatcher.Invoke(async () => await CreateNewTab(e.Uri)); };
                 await cw.AddScriptToExecuteOnDocumentCreatedAsync(ProtectionEngine.ElementBlockerBootstrapScript);
 
+                SetWebView2ColorScheme(tab, _isDarkTheme);
+
                 if (url == "about:welcome")
                     cw.NavigateToString(GetWelcomeHtml());
+                else if (url.StartsWith("about:history", StringComparison.OrdinalIgnoreCase))
+                    cw.NavigateToString(GetHistoryHtml());
+                else if (url.StartsWith("about:settings", StringComparison.OrdinalIgnoreCase))
+                    cw.NavigateToString(GetSettingsHtml());
+                else if (url.StartsWith("about:shortcuts", StringComparison.OrdinalIgnoreCase))
+                    cw.NavigateToString(GetShortcutsHtml());
                 else
                     cw.Navigate(url);
             }
@@ -709,9 +966,37 @@ namespace PrivacyMonitor
             tab.TitleBlock.Foreground = active ? TabActiveFg : TabInactiveFg;
             if (tab.TabHeader.Child is DockPanel dp && dp.Children.Count > 0 && dp.Children[0] is Button cb)
                 cb.Foreground = active ? TabActiveFg : TabInactiveFg;
-            // Active tab gets a subtle shadow
-            tab.TabHeader.Effect = active ? new DropShadowEffect { BlurRadius = 6, ShadowDepth = 0, Opacity = 0.06, Color = Colors.Black } : null;
+            // Active tab: subtle shadow and theme-aware border so it connects to nav bar
+            if (active)
+            {
+                tab.TabHeader.Effect = new DropShadowEffect { BlurRadius = 6, ShadowDepth = 0, Opacity = _isDarkTheme ? 0.12f : 0.06f, Color = Colors.Black };
+                tab.TabHeader.BorderThickness = new Thickness(1, 1, 1, 0);
+                tab.TabHeader.BorderBrush = TryFindResource("ActiveTabBorderBrush") is SolidColorBrush brush ? brush : new SolidColorBrush(Color.FromRgb(226, 232, 240));
+            }
+            else
+            {
+                tab.TabHeader.Effect = null;
+                tab.TabHeader.BorderThickness = new Thickness(0);
+                tab.TabHeader.BorderBrush = null;
+            }
         }
+
+        private void TrySetTitleBarDarkMode(bool useDark)
+        {
+            try
+            {
+                const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (hwnd == IntPtr.Zero) return;
+                int size = System.Runtime.InteropServices.Marshal.SizeOf(typeof(bool));
+                var value = useDark;
+                _ = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref value, size);
+            }
+            catch { }
+        }
+
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll", PreserveSig = true)]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref bool attrValue, int attrSize);
 
         private void UpdateTabTitle(BrowserTab tab)
         {
@@ -763,11 +1048,39 @@ namespace PrivacyMonitor
         // ================================================================
         private void OnNavigationStarting(BrowserTab tab, CoreWebView2NavigationStartingEventArgs e)
         {
+            if (e.Uri != null && e.Uri.StartsWith("about:history", StringComparison.OrdinalIgnoreCase))
+            {
+                e.Cancel = true;
+                Dispatcher.BeginInvoke(() => { try { tab.WebView?.CoreWebView2?.NavigateToString(GetHistoryHtml()); } catch { } });
+                return;
+            }
+            if (e.Uri != null && e.Uri.StartsWith("about:settings", StringComparison.OrdinalIgnoreCase))
+            {
+                e.Cancel = true;
+                Dispatcher.BeginInvoke(() => { try { tab.WebView?.CoreWebView2?.NavigateToString(GetSettingsHtml()); } catch { } });
+                return;
+            }
+            if (e.Uri != null && e.Uri.StartsWith("about:shortcuts", StringComparison.OrdinalIgnoreCase))
+            {
+                e.Cancel = true;
+                Dispatcher.BeginInvoke(() => { try { tab.WebView?.CoreWebView2?.NavigateToString(GetShortcutsHtml()); } catch { } });
+                return;
+            }
+            if (e.Uri != null && (e.Uri.StartsWith("edge://", StringComparison.OrdinalIgnoreCase) || e.Uri.StartsWith("chrome://", StringComparison.OrdinalIgnoreCase)))
+            {
+                e.Cancel = true;
+                if (e.Uri.StartsWith("edge://history", StringComparison.OrdinalIgnoreCase) || e.Uri.StartsWith("chrome://history", StringComparison.OrdinalIgnoreCase))
+                    Dispatcher.BeginInvoke(() => { try { tab.WebView?.CoreWebView2?.NavigateToString(GetHistoryHtml()); } catch { } });
+                return;
+            }
+
+            if (string.IsNullOrEmpty(e.Uri)) return;
+
             Dispatcher.Invoke(() =>
             {
                 try
                 {
-                    var uri = new Uri(e.Uri);
+                    var uri = new Uri(e.Uri!);
                     if (!uri.Host.Equals(tab.CurrentHost, StringComparison.OrdinalIgnoreCase))
                         tab.ResetDetection();
                     tab.CurrentHost = uri.Host; tab.Url = e.Uri; tab.IsLoading = true;
@@ -937,6 +1250,13 @@ namespace PrivacyMonitor
                 while (File.Exists(path))
                     path = Path.Combine(downloads, Path.GetFileNameWithoutExtension(name) + $" ({++n})" + Path.GetExtension(name));
                 e.ResultFilePath = path;
+                string fileName = Path.GetFileName(path);
+                Dispatcher.Invoke(() => { if (StatusText != null) StatusText.Text = "Downloading: " + fileName; });
+                op.StateChanged += (_, _) =>
+                {
+                    if (op.State == CoreWebView2DownloadState.Completed || op.State == CoreWebView2DownloadState.Interrupted)
+                        Dispatcher.Invoke(() => { if (StatusText != null) StatusText.Text = op.State == CoreWebView2DownloadState.Completed ? "Download complete." : "Ready"; });
+                };
             }
             catch { }
         }
@@ -1188,6 +1508,23 @@ namespace PrivacyMonitor
                         _dirty = true;
                     }
                 }
+                else if (cat == "settings")
+                {
+                    _settings.HomePage = root.TryGetProperty("homePage", out var hp) ? hp.GetString() ?? "about:welcome" : "about:welcome";
+                    _settings.Startup = root.TryGetProperty("startup", out var st) ? st.GetString() ?? "restore" : "restore";
+                    _settings.SearchEngineUrl = root.TryGetProperty("searchEngineUrl", out var se) ? se.GetString() ?? "https://duckduckgo.com/?q=" : "https://duckduckgo.com/?q=";
+                    SaveSettings();
+                }
+                else if (cat == "clearHistory")
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        _recentUrls.Clear();
+                        SaveRecent();
+                        try { tab.WebView?.CoreWebView2?.NavigateToString(GetHistoryHtml()); } catch { }
+                        if (StatusText != null) StatusText.Text = "History cleared.";
+                    });
+                }
             }
             catch { }
         }
@@ -1240,8 +1577,9 @@ namespace PrivacyMonitor
             ShieldGrade.Text = score.Grade;
             ShieldBadge.Background = ScoreBadgeBg(score.NumericScore);
 
-            // Score banner
-            GradeText.Text = score.Grade; GradeText.Foreground = new SolidColorBrush(Color.FromRgb(32, 33, 36));
+            // Score banner: grade letter in grade color, ring colored by grade
+            GradeText.Text = score.Grade;
+            GradeText.Foreground = score.GradeColor ?? ScoreBadgeBg(score.NumericScore);
             ScoreNum.Text = $"{score.NumericScore} / 100";
             ScoreSummary.Text = _expertMode ? score.Summary : (score.NumericScore >= 80 ? "Good. Few trackers." : score.NumericScore >= 55 ? "Okay. Some other companies involved." : "Lots of tracking. You're protected.");
             ScoreChip.Text = $"Score {score.NumericScore}";
@@ -1522,7 +1860,11 @@ namespace PrivacyMonitor
             if (radius <= 0) radius = 45;
             double circumference = 2 * Math.PI * radius;
             double progress = Math.Clamp(score, 0, 100) / 100.0 * circumference;
-            ScoreRing.Stroke = ScoreBadgeBg(score);
+            SolidColorBrush gradeBrush = ScoreBadgeBg(score);
+            ScoreRing.Stroke = gradeBrush;
+            // Base ring tinted with grade color so the whole circle reads as that grade
+            Color c = gradeBrush.Color;
+            ScoreRingBase.Stroke = new SolidColorBrush(Color.FromArgb(0x4D, c.R, c.G, c.B)); // ~30% opacity
             ScoreRing.StrokeDashArray = new DoubleCollection { progress, Math.Max(0, circumference - progress) };
             ScoreRing.StrokeDashOffset = circumference * 0.25;
         }
@@ -1839,10 +2181,26 @@ namespace PrivacyMonitor
             => UpdateAddressBarPlaceholder();
 
         private void AddressBar_GotFocus(object sender, RoutedEventArgs e)
-            => UpdateAddressBarPlaceholder();
+        {
+            UpdateAddressBarPlaceholder();
+            if (AddressBarBorder != null)
+            {
+                AddressBarBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(8, 145, 178));
+                AddressBarBorder.BorderThickness = new Thickness(2);
+                AddressBarBorder.Effect = new DropShadowEffect { BlurRadius = 8, ShadowDepth = 0, Opacity = 0.15, Color = Color.FromRgb(8, 145, 178) };
+            }
+        }
 
         private void AddressBar_LostFocus(object sender, RoutedEventArgs e)
-            => UpdateAddressBarPlaceholder();
+        {
+            UpdateAddressBarPlaceholder();
+            if (AddressBarBorder != null)
+            {
+                AddressBarBorder.BorderBrush = new SolidColorBrush(_isDarkTheme ? Color.FromRgb(95, 99, 104) : Color.FromRgb(226, 232, 240));
+                AddressBarBorder.BorderThickness = new Thickness(1);
+                AddressBarBorder.Effect = null;
+            }
+        }
 
         private void UpdateAddressBarPlaceholder()
         {
@@ -1883,6 +2241,73 @@ namespace PrivacyMonitor
             if (BookmarksBtn != null) BookmarksPopup.PlacementTarget = BookmarksBtn;
             BookmarksListBox.ItemsSource = _bookmarks.OrderByDescending(b => b.Added).Select(b => new { Display = b.Title.Length > 0 ? b.Title : b.Url, b.Url }).ToList();
             BookmarksPopup.IsOpen = true;
+        }
+
+        private void MenuBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (MenuBtn != null && AppMenu != null)
+            {
+                AppMenu.PlacementTarget = MenuBtn;
+                AppMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+                AppMenu.IsOpen = true;
+            }
+        }
+
+        private async void MenuNewTab_Click(object sender, RoutedEventArgs e) => await CreateNewTab();
+
+        private void MenuNewPrivateWindow_Click(object sender, RoutedEventArgs e)
+        {
+            var w = new MainWindow(isPrivate: true);
+            w.Title = "Privacy Monitor (Private)";
+            w.Show();
+        }
+
+        private void MenuBookmarks_Click(object sender, RoutedEventArgs e) => Bookmarks_Click(BookmarksBtn, e);
+
+        private void MenuHistory_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            if (tab?.IsReady != true) return;
+            try { tab.WebView.CoreWebView2.NavigateToString(GetHistoryHtml()); } catch { }
+        }
+
+        private void MenuClearBrowsingHistory_Click(object sender, RoutedEventArgs e)
+        {
+            _recentUrls.Clear();
+            SaveRecent();
+            var tab = ActiveTab;
+            if (tab?.IsReady == true)
+            {
+                try { tab.WebView.CoreWebView2.NavigateToString(GetHistoryHtml()); } catch { }
+            }
+            if (StatusText != null) StatusText.Text = "Browsing history cleared.";
+        }
+
+        private void MenuClearSiteData_Click(object sender, RoutedEventArgs e) => ClearSiteData_Click(sender, e);
+        private void MenuAllowThisSite_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            if (tab?.IsReady != true || string.IsNullOrEmpty(tab.CurrentHost)) { if (StatusText != null) StatusText.Text = "Open a site first."; return; }
+            ProtectionEngine.SetMode(tab.CurrentHost, ProtectionMode.Monitor);
+            SetProtectionMenuChecked(ProtectionMode.Monitor);
+            if (StatusText != null) StatusText.Text = $"Stopped blocking on {tab.CurrentHost}. Reload the page to apply.";
+        }
+        private void MenuOpenDownloads_Click(object sender, RoutedEventArgs e)
+        {
+            string downloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            if (!Directory.Exists(downloads)) Directory.CreateDirectory(downloads);
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(downloads) { UseShellExecute = true }); } catch { }
+        }
+        private void MenuZoomIn_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) tab.WebView.ZoomFactor = Math.Min(3.0, tab.WebView.ZoomFactor + 0.25); }
+        private void MenuZoomOut_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) tab.WebView.ZoomFactor = Math.Max(0.25, tab.WebView.ZoomFactor - 0.25); }
+        private void MenuZoomReset_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) tab.WebView.ZoomFactor = 1.0; }
+        private void MenuShortcuts_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) try { tab.WebView.CoreWebView2.NavigateToString(GetShortcutsHtml()); } catch { } }
+        private void MenuSettings_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) try { tab.WebView.CoreWebView2.NavigateToString(GetSettingsHtml()); } catch { } }
+        private void MenuAbout_Click(object sender, RoutedEventArgs e)
+        {
+            var ver = Assembly.GetExecutingAssembly().GetName().Version;
+            string version = ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "1.0.0";
+            MessageBox.Show(this, $"Privacy Monitor\nVersion {version}\n\nAgjencia per Informim dhe Privatesi.\nBuilt for Windows.", "About Privacy Monitor", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void BookmarksList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1944,10 +2369,11 @@ namespace PrivacyMonitor
             }
 
             string url;
+            string searchUrl = !string.IsNullOrWhiteSpace(_settings.SearchEngineUrl) ? _settings.SearchEngineUrl : "https://duckduckgo.com/?q=";
             if (LooksLikeUrl(input))
                 url = input.Contains("://") ? input : "https://" + input;
             else
-                url = SearchEngineUrl + Uri.EscapeDataString(input);
+                url = searchUrl + Uri.EscapeDataString(input);
             try
             {
                 tab.WebView.CoreWebView2.Navigate(url);
@@ -1986,6 +2412,7 @@ namespace PrivacyMonitor
                 {
                     case Key.T: await CreateNewTab(); e.Handled = true; break;
                     case Key.W: CloseTab(_activeTabId); e.Handled = true; break;
+                    case Key.H: MenuHistory_Click(this, e); e.Handled = true; break;
                     case Key.L: AddressBar.Focus(); AddressBar.SelectAll(); e.Handled = true; break;
                     case Key.F: ShowFindInPage(); e.Handled = true; break;
                     case Key.P: if (tab?.IsReady == true) { try { await tab.WebView.CoreWebView2.ExecuteScriptAsync("window.print()"); } catch { } } e.Handled = true; break;
