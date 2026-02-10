@@ -116,8 +116,8 @@ namespace PrivacyMonitor
             .header a:hover{text-decoration:underline}
             .header a.danger{color:#D93025}
             @media(prefers-color-scheme:dark){.header a.danger{color:#EA4335}}
-            .btn-danger{background:#D93025;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit}
-            .btn-danger:hover{background:#B71C1C}
+            .btn-danger{display:inline-block;background:#D93025;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit;text-decoration:none}
+            .btn-danger:hover{background:#B71C1C;color:#fff;text-decoration:none}
             @media(prefers-color-scheme:dark){.btn-danger{background:#EA4335}.btn-danger:hover{background:#D93025}}
             .search-wrap{margin-bottom:20px}
             .search{width:100%;max-width:420px;height:44px;border-radius:22px;border:1px solid var(--search-border);background:var(--tip-bg);padding:0 20px;font-size:14px;color:var(--text);outline:none;transition:border-color .2s}
@@ -154,7 +154,7 @@ namespace PrivacyMonitor
             var sb = new StringBuilder();
             sb.Append("<!DOCTYPE html><html><head><meta name='color-scheme' content='light dark'/><meta charset='utf-8'/><title>History</title><style>");
             sb.Append(HistoryPageCss);
-            sb.Append("</style></head><body><div class='header'><h1>History</h1><div class='header-links'><a href='about:welcome'>New tab</a> <span style='color:var(--text-muted)'>|</span> <button type='button' id='clearHistory' class='btn-danger'>Clear history</button></div></div>");
+            sb.Append("</style></head><body><div class='header'><h1>History</h1><div class='header-links'><a href='about:welcome'>New tab</a> <span style='color:var(--text-muted)'>|</span> <a href='about:clearhistory' class='btn-danger'>Clear history</a></div></div>");
             sb.Append("<div class='search-wrap'><input type='text' class='search' id='q' placeholder='Search history' autofocus/></div>");
             sb.Append("<div class='section'><div class='section-title'>Browsing history</div><div class='list'><ul id='list'>");
             foreach (var (title, url, visited) in _recentUrls)
@@ -181,8 +181,6 @@ namespace PrivacyMonitor
                         }
                     };
                 }
-                var clearBtn=document.getElementById('clearHistory');
-                if(clearBtn){ clearBtn.onclick=function(){ try{ var w=window.chrome&&window.chrome.webview; if(w) w.postMessage(JSON.stringify({cat:'clearHistory'})); }catch(e){} }; }
             </script></body></html>");
             return sb.ToString();
         }
@@ -1064,6 +1062,18 @@ namespace PrivacyMonitor
             {
                 e.Cancel = true;
                 Dispatcher.BeginInvoke(() => { try { tab.WebView?.CoreWebView2?.NavigateToString(GetShortcutsHtml()); } catch { } });
+                return;
+            }
+            if (e.Uri != null && e.Uri.StartsWith("about:clearhistory", StringComparison.OrdinalIgnoreCase))
+            {
+                e.Cancel = true;
+                Dispatcher.BeginInvoke(() =>
+                {
+                    _recentUrls.Clear();
+                    SaveRecent();
+                    try { tab.WebView?.CoreWebView2?.NavigateToString(GetHistoryHtml()); } catch { }
+                    if (StatusText != null) StatusText.Text = "History cleared.";
+                });
                 return;
             }
             if (e.Uri != null && (e.Uri.StartsWith("edge://", StringComparison.OrdinalIgnoreCase) || e.Uri.StartsWith("chrome://", StringComparison.OrdinalIgnoreCase)))
