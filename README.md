@@ -2,6 +2,16 @@
 
 A Windows desktop browser built with WPF and **WebView2** that monitors and protects your privacy while you browse. It shows a **privacy score** and **grade** for each site, detects trackers and fingerprinting, can **block** unwanted requests, and produces **audit reports** with GDPR-oriented findings.
 
+Unlike a normal browser, Privacy Monitor is meant to be a **privacy X-ray tool** rather than your day‑to‑day browser. You open sites inside it when you want to **see everything they are doing behind the scenes**: which trackers they load, what data they send, which cookies and identifiers they set, and how well they comply with basic security and GDPR expectations.
+
+## Who it is for
+
+- **Privacy‑conscious users** who want a clearer picture of how specific sites track them, beyond what simple “ad blocker” extensions show.
+- **Developers and QA teams** who need to test how their own website behaves in the real world (requests, cookies, storage, fingerprinting attempts, security headers).
+- **Privacy, security, and compliance professionals** who prepare **GDPR / privacy audits** and need repeatable, documented evidence (HTML/CSV reports, screenshots, timelines).
+
+You can think of it as a **diagnostic browser**: you keep using your normal browser every day, and use Privacy Monitor whenever you want to inspect, troubleshoot, or document what a site is really doing.
+
 ## What it does
 
 - **Browse** — Chrome-style tabs, address bar, back/forward/reload. Each tab embeds a full Chromium-based WebView2. Downloads go to your **Downloads** folder. **Escape** stops loading; Back/Forward are disabled when there is no history.
