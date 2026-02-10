@@ -123,11 +123,11 @@ namespace PrivacyMonitor
                 };
             }
 
-            // 3) Known tracker detection (confidence-weighted) — BlockKnown at 0.70 for stronger blocking
+            // 3) Known tracker detection (confidence-weighted) — lower thresholds for stronger protection
             double trackerConfidence = MaxSignalConfidence(entry.Signals, "known_tracker", "heuristic_tracker");
             if (blockAdsTrackers && !string.IsNullOrEmpty(entry.TrackerLabel))
             {
-                if (mode == ProtectionMode.BlockKnown && trackerConfidence >= 0.70)
+                if (mode == ProtectionMode.BlockKnown && trackerConfidence >= 0.40)
                 {
                     return new BlockDecision
                     {
@@ -139,7 +139,7 @@ namespace PrivacyMonitor
                     };
                 }
 
-                if (mode == ProtectionMode.Aggressive && trackerConfidence >= 0.45)
+                if (mode == ProtectionMode.Aggressive && trackerConfidence >= 0.25)
                 {
                     return new BlockDecision
                     {
@@ -172,7 +172,7 @@ namespace PrivacyMonitor
                 }
             }
 
-            // 5) Aggressive heuristic layer
+            // 5) Aggressive heuristic layer (includes third_party_script + etag_tracking)
             if (mode == ProtectionMode.Aggressive && blockAdsTrackers)
             {
                 if (isMedia)
@@ -182,11 +182,13 @@ namespace PrivacyMonitor
                                 s.SignalType == "pixel_tracking" ||
                                 s.SignalType == "obfuscated_payload" ||
                                 s.SignalType == "redirect_bounce" ||
-                                s.SignalType == "cookie_sync")
+                                s.SignalType == "cookie_sync" ||
+                                s.SignalType == "third_party_script" ||
+                                s.SignalType == "etag_tracking")
                     .OrderByDescending(s => s.Confidence)
                     .FirstOrDefault();
 
-                if (heuristic != null)
+                if (heuristic != null && heuristic.Confidence >= 0.38)
                 {
                     return new BlockDecision
                     {
@@ -195,6 +197,33 @@ namespace PrivacyMonitor
                         Category = heuristic.SignalType == "js_injection" ? "Behavioral" : "Tracking",
                         Confidence = heuristic.Confidence,
                         TrackerLabel = "Heuristic Detection"
+                    };
+                }
+            }
+
+            // 5b) BlockKnown: also block strong ad-like domains; Aggressive: block all ad-like
+            if (blockAdsTrackers && !isMedia && IsAdLikeDomain(entry.Host))
+            {
+                if (mode == ProtectionMode.Aggressive)
+                {
+                    return new BlockDecision
+                    {
+                        Blocked = true,
+                        Reason = "Ad-like domain name",
+                        Category = "Tracking",
+                        Confidence = 0.65,
+                        TrackerLabel = "Domain heuristic"
+                    };
+                }
+                if (mode == ProtectionMode.BlockKnown && IsStrongAdLikeDomain(entry.Host))
+                {
+                    return new BlockDecision
+                    {
+                        Blocked = true,
+                        Reason = "Ad/tracker domain name",
+                        Category = "Tracking",
+                        Confidence = 0.70,
+                        TrackerLabel = "Domain heuristic"
                     };
                 }
             }
@@ -246,8 +275,8 @@ namespace PrivacyMonitor
                 if (!entry.SignalTypes.Contains(signalType))
                     entry.SignalTypes.Add(signalType);
 
-                // Promote to learned tracker when: 5+ tracker signals
-                if (!entry.IsConfirmedTracker && entry.ObservationCount >= 5)
+                // Promote to learned tracker when: 3+ tracker signals (faster learning for stronger protection)
+                if (!entry.IsConfirmedTracker && entry.ObservationCount >= 3)
                 {
                     entry.IsConfirmedTracker = true;
                     entry.ConfirmedAt = DateTime.UtcNow;
@@ -265,11 +294,11 @@ namespace PrivacyMonitor
             bool promoted = false;
             lock (entry.Sync)
             {
-                if (!entry.SeenOnSites.Contains(siteHost))
-                {
-                    entry.SeenOnSites.Add(siteHost);
-                    // If appears on 3+ different sites, strong signal
-                    if (entry.SeenOnSites.Count >= 3 && !entry.IsConfirmedTracker)
+                    if (!entry.SeenOnSites.Contains(siteHost))
+                    {
+                        entry.SeenOnSites.Add(siteHost);
+                        // If appears on 2+ different sites, strong cross-site signal
+                        if (entry.SeenOnSites.Count >= 2 && !entry.IsConfirmedTracker)
                     {
                         entry.IsConfirmedTracker = true;
                         entry.ConfirmedAt = DateTime.UtcNow;
@@ -357,6 +386,26 @@ namespace PrivacyMonitor
                         Confidence = e.Confidence <= 0 ? 0.95 : Math.Clamp(e.Confidence, 0.5, 1.0)
                     };
                 }
+                // Merge in any default entries not yet in list (10x stronger: existing users get new domains)
+                var defaultEntries = GetDefaultBlocklistEntries();
+                bool merged = false;
+                foreach (var e in defaultEntries)
+                {
+                    var domain = e.Domain.Trim().ToLowerInvariant();
+                    if (!_staticBlocklist.ContainsKey(domain))
+                    {
+                        _staticBlocklist[domain] = new BlocklistEntry
+                        {
+                            Domain = domain,
+                            Label = string.IsNullOrWhiteSpace(e.Label) ? domain : e.Label,
+                            Category = NormalizeCategory(e.Category),
+                            Confidence = e.Confidence <= 0 ? 0.95 : Math.Clamp(e.Confidence, 0.5, 1.0)
+                        };
+                        merged = true;
+                    }
+                }
+                if (merged)
+                    SaveBlocklist(_staticBlocklist.Select(kv => new BlocklistEntry { Domain = kv.Value.Domain, Label = kv.Value.Label, Category = kv.Value.Category, Confidence = kv.Value.Confidence }).ToList());
 
                 _blocklistSuffixes = _staticBlocklist.Keys.OrderByDescending(k => k.Length).ToArray();
             }
@@ -519,158 +568,343 @@ namespace PrivacyMonitor
             new BlocklistEntry { Domain = "shareasale.com", Label = "ShareASale", Category = "Ad" },
             new BlocklistEntry { Domain = "dpbolvw.net", Label = "CJ Affiliate", Category = "Ad" },
             new BlocklistEntry { Domain = "impact.com", Label = "Impact", Category = "Ad" },
+            // ─── 10x stronger: EasyList-style and major ad/tracking domains ───
+            new BlocklistEntry { Domain = "2mdn.net", Label = "DoubleClick 2mdn", Category = "Ad" },
+            new BlocklistEntry { Domain = "tpc.googlesyndication.com", Label = "Google Syndication", Category = "Ad" },
+            new BlocklistEntry { Domain = "partner.googleadservices.com", Label = "Google Ad Services", Category = "Ad" },
+            new BlocklistEntry { Domain = "www.googleadservices.com", Label = "Google Ad Services", Category = "Ad" },
+            new BlocklistEntry { Domain = "static.doubleclick.net", Label = "DoubleClick Static", Category = "Ad" },
+            new BlocklistEntry { Domain = "ad.doubleclick.net", Label = "DoubleClick Ad", Category = "Ad" },
+            new BlocklistEntry { Domain = "securepubads.g.doubleclick.net", Label = "Google Pub Ads", Category = "Ad" },
+            new BlocklistEntry { Domain = "pagead.l.doubleclick.net", Label = "DoubleClick Pagead", Category = "Ad" },
+            new BlocklistEntry { Domain = "pagead46.l.doubleclick.net", Label = "DoubleClick Pagead", Category = "Ad" },
+            new BlocklistEntry { Domain = "cm.g.doubleclick.net", Label = "DoubleClick CM", Category = "Ad" },
+            new BlocklistEntry { Domain = "static.googleadsserving.com", Label = "Google Ad Serving", Category = "Ad" },
+            new BlocklistEntry { Domain = "video-ad-stats.googlesyndication.com", Label = "Google Video Ad Stats", Category = "Ad" },
+            new BlocklistEntry { Domain = "adclick.g.doubleclick.net", Label = "DoubleClick Adclick", Category = "Ad" },
+            new BlocklistEntry { Domain = "googleads.g.doubleclick.net", Label = "Google Ads", Category = "Ad" },
+            new BlocklistEntry { Domain = "ads-api.twitter.com", Label = "Twitter Ads API", Category = "Ad" },
+            new BlocklistEntry { Domain = "analytics.twitter.com", Label = "Twitter Analytics", Category = "Tracking" },
+            new BlocklistEntry { Domain = "cdn.amplitude.com", Label = "Amplitude CDN", Category = "Tracking" },
+            new BlocklistEntry { Domain = "adroll.com", Label = "AdRoll", Category = "Ad" },
+            new BlocklistEntry { Domain = "d.adroll.com", Label = "AdRoll", Category = "Ad" },
+            new BlocklistEntry { Domain = "adform.net", Label = "Adform", Category = "Ad" },
+            new BlocklistEntry { Domain = "adform.com", Label = "Adform", Category = "Ad" },
+            new BlocklistEntry { Domain = "adsymptotic.com", Label = "Adsymptotic", Category = "Ad" },
+            new BlocklistEntry { Domain = "adgrx.com", Label = "AdGear", Category = "Ad" },
+            new BlocklistEntry { Domain = "adhigh.net", Label = "AdHigh", Category = "Ad" },
+            new BlocklistEntry { Domain = "adtech.com", Label = "AdTech", Category = "Ad" },
+            new BlocklistEntry { Domain = "appnexus.com", Label = "AppNexus", Category = "Ad" },
+            new BlocklistEntry { Domain = "atomx.com", Label = "Atomx", Category = "Ad" },
+            new BlocklistEntry { Domain = "bidvertiser.com", Label = "Bidvertiser", Category = "Ad" },
+            new BlocklistEntry { Domain = "braze.com", Label = "Braze", Category = "Tracking" },
+            new BlocklistEntry { Domain = "bounceexchange.com", Label = "Bounce Exchange", Category = "Tracking" },
+            new BlocklistEntry { Domain = "dotomi.com", Label = "Dotomi", Category = "Ad" },
+            new BlocklistEntry { Domain = "exelator.com", Label = "eXelate", Category = "Tracking" },
+            new BlocklistEntry { Domain = "eyeviewdigital.com", Label = "EyeView", Category = "Ad" },
+            new BlocklistEntry { Domain = "fastclick.net", Label = "FastClick", Category = "Ad" },
+            new BlocklistEntry { Domain = "fwmrm.net", Label = "FreeWheel", Category = "Ad" },
+            new BlocklistEntry { Domain = "gigya.com", Label = "Gigya", Category = "Tracking" },
+            new BlocklistEntry { Domain = "imrworldwide.com", Label = "Nielsen IMR", Category = "Tracking" },
+            new BlocklistEntry { Domain = "insightexpressai.com", Label = "Insight Express", Category = "Ad" },
+            new BlocklistEntry { Domain = "lijit.com", Label = "Sovrn Lijit", Category = "Ad" },
+            new BlocklistEntry { Domain = "liveintent.com", Label = "LiveIntent", Category = "Ad" },
+            new BlocklistEntry { Domain = "livere.com", Label = "LiveRe", Category = "Tracking" },
+            new BlocklistEntry { Domain = "lkqd.net", Label = "Lkqd", Category = "Ad" },
+            new BlocklistEntry { Domain = "loopme.com", Label = "LoopMe", Category = "Ad" },
+            new BlocklistEntry { Domain = "mediamath.com", Label = "MediaMath", Category = "Ad" },
+            new BlocklistEntry { Domain = "mgid.com", Label = "MGID", Category = "Ad" },
+            new BlocklistEntry { Domain = "mookie1.com", Label = "Mookie", Category = "Ad" },
+            new BlocklistEntry { Domain = "nexage.com", Label = "Nexage", Category = "Ad" },
+            new BlocklistEntry { Domain = "perfectaudience.com", Label = "Perfect Audience", Category = "Ad" },
+            new BlocklistEntry { Domain = "pulsead.ai", Label = "PulseAd", Category = "Ad" },
+            new BlocklistEntry { Domain = "reachlocal.com", Label = "ReachLocal", Category = "Ad" },
+            new BlocklistEntry { Domain = "revcontent.com", Label = "Revcontent", Category = "Ad" },
+            new BlocklistEntry { Domain = "richaudience.com", Label = "Rich Audience", Category = "Ad" },
+            new BlocklistEntry { Domain = "simpli.fi", Label = "Simpli.fi", Category = "Ad" },
+            new BlocklistEntry { Domain = "sonobi.com", Label = "Sonobi", Category = "Ad" },
+            new BlocklistEntry { Domain = "spotxchange.com", Label = "SpotX", Category = "Ad" },
+            new BlocklistEntry { Domain = "spotx.tv", Label = "SpotX", Category = "Ad" },
+            new BlocklistEntry { Domain = "stackadapt.com", Label = "StackAdapt", Category = "Ad" },
+            new BlocklistEntry { Domain = "teads.tv", Label = "Teads", Category = "Ad" },
+            new BlocklistEntry { Domain = "theadhost.com", Label = "The Ad Host", Category = "Ad" },
+            new BlocklistEntry { Domain = "tribalfusion.com", Label = "Tribal Fusion", Category = "Ad" },
+            new BlocklistEntry { Domain = "turn.com", Label = "Turn", Category = "Ad" },
+            new BlocklistEntry { Domain = "undertone.com", Label = "Undertone", Category = "Ad" },
+            new BlocklistEntry { Domain = "viglink.com", Label = "VigLink", Category = "Ad" },
+            new BlocklistEntry { Domain = "yieldoptimizer.com", Label = "Yield Optimizer", Category = "Ad" },
+            new BlocklistEntry { Domain = "zergnet.com", Label = "ZergNet", Category = "Ad" },
+            new BlocklistEntry { Domain = "zqtk.net", Label = "Zqtk", Category = "Ad" },
+            new BlocklistEntry { Domain = "pippio.com", Label = "LiveRamp Pippio", Category = "Tracking" },
+            new BlocklistEntry { Domain = "liadm.com", Label = "LiveIntent", Category = "Tracking" },
+            new BlocklistEntry { Domain = "intentiq.com", Label = "Intent IQ", Category = "Tracking" },
+            new BlocklistEntry { Domain = "eyeota.net", Label = "Eyeota", Category = "Tracking" },
+            new BlocklistEntry { Domain = "moatpixel.com", Label = "Moat Pixel", Category = "Ad" },
+            new BlocklistEntry { Domain = "nr-data.net", Label = "New Relic Data", Category = "Tracking" },
+            new BlocklistEntry { Domain = "bam.nr-data.net", Label = "New Relic Browser", Category = "Tracking" },
+            new BlocklistEntry { Domain = "parsely.com", Label = "Parse.ly", Category = "Tracking" },
+            new BlocklistEntry { Domain = "sb.scorecardresearch.com", Label = "comScore Beacon", Category = "Tracking" },
+            new BlocklistEntry { Domain = "static.chartbeat.com", Label = "Chartbeat", Category = "Tracking" },
+            new BlocklistEntry { Domain = "newrelic.com", Label = "New Relic", Category = "Tracking" },
+            new BlocklistEntry { Domain = "sentry.io", Label = "Sentry", Category = "Tracking" },
+            new BlocklistEntry { Domain = "bugsnag.com", Label = "Bugsnag", Category = "Tracking" },
+            new BlocklistEntry { Domain = "branch.io", Label = "Branch", Category = "Tracking" },
+            new BlocklistEntry { Domain = "app.link", Label = "Branch Links", Category = "Tracking" },
+            new BlocklistEntry { Domain = "marketo.net", Label = "Marketo", Category = "Tracking" },
+            new BlocklistEntry { Domain = "mktoresp.com", Label = "Marketo", Category = "Tracking" },
+            new BlocklistEntry { Domain = "hubspot.com", Label = "HubSpot", Category = "Tracking" },
+            new BlocklistEntry { Domain = "ensighten.com", Label = "Ensighten", Category = "Tracking" },
+            new BlocklistEntry { Domain = "tt.omtrdc.net", Label = "Adobe Target", Category = "Tracking" },
+            new BlocklistEntry { Domain = "addtoany.com", Label = "AddToAny", Category = "Tracking" },
+            new BlocklistEntry { Domain = "cookiebot.com", Label = "Cookiebot", Category = "Tracking" },
+            new BlocklistEntry { Domain = "onetrust.com", Label = "OneTrust", Category = "Tracking" },
+            new BlocklistEntry { Domain = "cookielaw.org", Label = "OneTrust Cookielaw", Category = "Tracking" },
+            new BlocklistEntry { Domain = "trustarc.com", Label = "TrustArc", Category = "Tracking" },
+            new BlocklistEntry { Domain = "partnerize.com", Label = "Partnerize", Category = "Ad" },
+            new BlocklistEntry { Domain = "clickbank.net", Label = "ClickBank", Category = "Ad" },
+            new BlocklistEntry { Domain = "crisp.chat", Label = "Crisp", Category = "Tracking" },
+            new BlocklistEntry { Domain = "tawk.to", Label = "Tawk.to", Category = "Tracking" },
+            new BlocklistEntry { Domain = "fls-na.amazon.com", Label = "Amazon Tracking", Category = "Tracking" },
+            new BlocklistEntry { Domain = "assoc-amazon.com", Label = "Amazon Associates", Category = "Ad" },
         };
 
         // ════════════════════════════════════════════
-        //  ANTI-FINGERPRINTING JAVASCRIPT
+        //  ANTI-FINGERPRINTING (BLEND-IN)
         // ════════════════════════════════════════════
 
+        /// <summary>Fixed User-Agent for blend-in when anti-FP is on. Must match JS spoofs (Chrome on Windows).</summary>
+        public const string BlendInUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
         /// <summary>
-        /// Generate a JavaScript snippet that overrides/randomizes browser APIs
-        /// to prevent fingerprinting. Injected on every page load when anti-FP is enabled.
-        /// Uses a session-stable random seed so pages work consistently within a session.
+        /// Blend-in anti-fingerprinting: Chrome-on-Windows profile. Uses real Chrome replay when artifacts are loaded; otherwise pass-through for canvas/WebGL.
+        /// See docs/FINGERPRINT_REPLAY_ARCHITECTURE.md.
         /// </summary>
-        public static string AntiFingerPrintScript => @"
+        public static string AntiFingerPrintScript => GetAntiFingerPrintScript(LoadFingerprintArtifacts());
+
+        private static readonly string FingerprintArtifactsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "PrivacyMonitor", "fingerprint-artifacts.json");
+
+        /// <summary>Load captured Chrome fingerprint artifacts from %AppData%\\PrivacyMonitor\\fingerprint-artifacts.json. Returns null on missing/invalid.</summary>
+        public static string? LoadFingerprintArtifacts()
+        {
+            try
+            {
+                if (!File.Exists(FingerprintArtifactsPath)) return null;
+                var json = File.ReadAllText(FingerprintArtifactsPath);
+                if (string.IsNullOrWhiteSpace(json)) return null;
+                _ = JsonSerializer.Deserialize<JsonElement>(json);
+                return json;
+            }
+            catch { return null; }
+        }
+
+        private static string EscapeForEmbeddedJson(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n");
+        }
+
+        private static string GetAntiFingerPrintScript(string? artifactsJson)
+        {
+            var artifactsJs = string.IsNullOrWhiteSpace(artifactsJson) ? "{}" : EscapeForEmbeddedJson(artifactsJson!);
+            const string script = @"
 (function() {
     'use strict';
-    // Session-stable seed (changes per page load, consistent within page)
-    const _seed = Math.floor(Math.random() * 2147483647);
-    function _hash(s) { let h=_seed; for(let i=0;i<s.length;i++) h=((h<<5)-h)+s.charCodeAt(i)|0; return h; }
-    function _rand(min,max) { const x=Math.sin(_seed*9301+49297)%1; return min+Math.abs(x)*(max-min); }
+    var __pmArtifacts = JSON.parse(""__PM_ARTIFACTS_JSON__"");
+    var A = __pmArtifacts;
 
-    // ── Canvas: Add subtle noise to pixel data ──
+    // ── Canvas: Replay real Chrome pixel buffer when artifact exists; else pass-through ──
     const _toDataURL = HTMLCanvasElement.prototype.toDataURL;
     const _toBlob = HTMLCanvasElement.prototype.toBlob;
     const _getImageData = CanvasRenderingContext2D.prototype.getImageData;
-
-    function _noiseCanvas(ctx) {
-        try {
-            const w = ctx.canvas.width, h = ctx.canvas.height;
-            if (w < 2 || h < 2) return;
-            const img = _getImageData.call(ctx, 0, 0, Math.min(w,4), Math.min(h,4));
-            for (let i = 0; i < img.data.length; i += 4) {
-                img.data[i] = (img.data[i] + (_hash('c'+i) % 3) - 1) & 0xFF;
-            }
-            ctx.putImageData(img, 0, 0);
-        } catch(e) {}
+    function _b64ToU8(b64) {
+        var bin = atob(b64);
+        var arr = new Uint8ClampedArray(bin.length);
+        for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return arr;
     }
-
-    HTMLCanvasElement.prototype.toDataURL = function() {
-        try { const ctx = this.getContext('2d'); if (ctx) _noiseCanvas(ctx); } catch(e) {}
+    CanvasRenderingContext2D.prototype.getImageData = function(sx, sy, sw, sh) {
+        var img = _getImageData.call(this, sx, sy, sw, sh);
+        var key = sw + 'x' + sh;
+        if (A.canvas && A.canvas[key]) {
+            var bytes = _b64ToU8(A.canvas[key]);
+            if (bytes.length >= img.data.length) img.data.set(bytes.subarray(0, img.data.length));
+            return img;
+        }
+        return img;
+    };
+    HTMLCanvasElement.prototype.toDataURL = function(type) {
+        try {
+            var ctx = this.getContext('2d');
+            if (ctx && A.canvas) {
+                var key = this.width + 'x' + this.height;
+                if (A.canvas[key]) {
+                    var bytes = _b64ToU8(A.canvas[key]);
+                    var img = ctx.createImageData(this.width, this.height);
+                    if (bytes.length >= img.data.length) img.data.set(bytes.subarray(0, img.data.length));
+                    ctx.putImageData(img, 0, 0);
+                }
+            }
+        } catch(e) {}
         return _toDataURL.apply(this, arguments);
     };
-    HTMLCanvasElement.prototype.toBlob = function() {
-        try { const ctx = this.getContext('2d'); if (ctx) _noiseCanvas(ctx); } catch(e) {}
-        return _toBlob.apply(this, arguments);
-    };
-    CanvasRenderingContext2D.prototype.getImageData = function() {
-        const data = _getImageData.apply(this, arguments);
+    HTMLCanvasElement.prototype.toBlob = function(cb, type, quality) {
         try {
-            for (let i = 0; i < Math.min(data.data.length, 64); i += 4) {
-                data.data[i] = (data.data[i] + (_hash('g'+i) % 3) - 1) & 0xFF;
+            var ctx = this.getContext('2d');
+            if (ctx && A.canvas) {
+                var key = this.width + 'x' + this.height;
+                if (A.canvas[key]) {
+                    var bytes = _b64ToU8(A.canvas[key]);
+                    var img = ctx.createImageData(this.width, this.height);
+                    if (bytes.length >= img.data.length) img.data.set(bytes.subarray(0, img.data.length));
+                    ctx.putImageData(img, 0, 0);
+                }
             }
         } catch(e) {}
-        return data;
+        return _toBlob.apply(this, arguments);
     };
 
-    // ── WebGL: Return generic vendor/renderer for debug info ──
+    // ── WebGL: Replay real Chrome framebuffer/params/extensions when artifact exists; else pass-through ──
     try {
-        const wgl = WebGLRenderingContext.prototype;
-        const _getParam = wgl.getParameter;
-        const UNMASKED_VENDOR = 0x9245;
-        const UNMASKED_RENDERER = 0x9246;
-        wgl.getParameter = function(param) {
-            if (param === UNMASKED_VENDOR) return 'Google Inc.';
-            if (param === UNMASKED_RENDERER) return 'ANGLE (Generic GPU)';
+        var wgl = WebGLRenderingContext.prototype;
+        var _getParam = wgl.getParameter;
+        var _getExt = wgl.getExtension;
+        var _readPixels = wgl.readPixels;
+        wgl.getParameter = function(p) {
+            if (A.webgl && A.webgl.params) {
+                var hex = '0x' + (p >>> 0).toString(16).toUpperCase();
+                if (A.webgl.params[hex] !== undefined) return A.webgl.params[hex];
+            }
             return _getParam.apply(this, arguments);
         };
+        var _getSupportedExtensions = wgl.getSupportedExtensions;
+        wgl.getSupportedExtensions = function() {
+            if (A.webgl && A.webgl.extensions && Array.isArray(A.webgl.extensions)) return A.webgl.extensions.slice();
+            return _getSupportedExtensions.apply(this, arguments);
+        };
+        wgl.getExtension = function(name) {
+            if (name === 'WEBGL_debug_renderer_info') return { UNMASKED_VENDOR_WEBGL: 0x9245, UNMASKED_RENDERER_WEBGL: 0x9246 };
+            return _getExt.apply(this, arguments);
+        };
+        wgl.readPixels = function(x, y, w, h, format, type, pixels) {
+            if (pixels && format === 0x1908 && type === 0x1401 && A.webgl) {
+                var key = w + 'x' + h;
+                if (A.webgl[key]) {
+                    var bytes = _b64ToU8(A.webgl[key]);
+                    if (bytes.length >= pixels.length) pixels.set(bytes.subarray(0, pixels.length));
+                    return;
+                }
+            }
+            return _readPixels.apply(this, arguments);
+        };
         if (typeof WebGL2RenderingContext !== 'undefined') {
-            const _getParam2 = WebGL2RenderingContext.prototype.getParameter;
-            WebGL2RenderingContext.prototype.getParameter = function(param) {
-                if (param === UNMASKED_VENDOR) return 'Google Inc.';
-                if (param === UNMASKED_RENDERER) return 'ANGLE (Generic GPU)';
+            var wgl2 = WebGL2RenderingContext.prototype;
+            var _getParam2 = wgl2.getParameter;
+            wgl2.getParameter = function(p) {
+                if (A.webgl && A.webgl.params) {
+                    var hex = '0x' + (p >>> 0).toString(16).toUpperCase();
+                    if (A.webgl.params[hex] !== undefined) return A.webgl.params[hex];
+                }
                 return _getParam2.apply(this, arguments);
             };
-        }
-    } catch(e) {}
-
-    // ── AudioContext: Add tiny noise to DynamicsCompressor output ──
-    try {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (AC) {
-            const _createOsc = AC.prototype.createOscillator;
-            AC.prototype.createOscillator = function() {
-                const osc = _createOsc.apply(this, arguments);
-                try {
-                    const gain = this.createGain();
-                    gain.gain.value = 1.0 + (_hash('audio') % 100) / 1000000;
-                    osc._pmGain = gain;
-                } catch(e) {}
-                return osc;
+            var _getSupportedExtensions2 = wgl2.getSupportedExtensions;
+            wgl2.getSupportedExtensions = function() {
+                if (A.webgl && A.webgl.extensions && Array.isArray(A.webgl.extensions)) return A.webgl.extensions.slice();
+                return _getSupportedExtensions2.apply(this, arguments);
             };
         }
     } catch(e) {}
 
-    // ── Navigator: Spoof hardware properties ──
+    // ── Fonts: Whitelist (Chrome default Windows) + measureText round ──
     try {
-        const spoofs = {
-            hardwareConcurrency: [2, 4, 8][Math.abs(_hash('hc')) % 3],
-            deviceMemory: [4, 8][Math.abs(_hash('dm')) % 2],
-            platform: 'Win32',
-            vendor: 'Google Inc.'
+        const FONT_W = 'arial,arial black,calibri,cambria,comic sans ms,consolas,courier,courier new,georgia,impact,lucida console,lucida sans unicode,microsoft sans serif,segoe ui,tahoma,times new roman,trebuchet ms,verdana'.split(',');
+        function _normFont(f) {
+            const s = (f||'').split(',')[0].trim().toLowerCase().replace(/['""]/g,'');
+            return FONT_W.some(w => s === w || s.startsWith(w + ' ')) ? f : 'Arial';
+        }
+        const _measureText = CanvasRenderingContext2D.prototype.measureText;
+        CanvasRenderingContext2D.prototype.measureText = function(text) {
+            const orig = this.font;
+            this.font = _normFont(this.font);
+            const r = _measureText.call(this, text);
+            this.font = orig;
+            return { width: Math.round(r.width * 2) / 2 };
         };
-        for (const [prop, val] of Object.entries(spoofs)) {
-            try {
-                Object.defineProperty(Navigator.prototype, prop, {
-                    get: function() { return val; },
-                    configurable: true
-                });
-            } catch(e) {}
+        if (document.fonts && document.fonts.check) {
+            const _check = document.fonts.check.bind(document.fonts);
+            document.fonts.check = function(font) {
+                const s = (font||'').split(' ').slice(0,2).join(' ').toLowerCase();
+                if (!FONT_W.some(w => s.indexOf(w) >= 0)) return false;
+                return _check(font);
+            };
         }
     } catch(e) {}
 
-    // ── Screen: Slight randomization to avoid exact matches ──
+    // ── AudioContext: Replay real Chrome buffer when artifact exists; else pass-through ──
     try {
-        const realWidth = screen.width, realHeight = screen.height;
-        // Don't change actual dimensions (breaks layouts), but randomize colorDepth/pixelDepth
+        var _getChannelData = AudioBuffer.prototype.getChannelData;
+        function _b64ToF32(b64) {
+            var bin = atob(b64);
+            var u8 = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+            return new Float32Array(u8.buffer);
+        }
+        AudioBuffer.prototype.getChannelData = function(channel) {
+            if (A.audio && A.audio[String(this.length)]) {
+                var f32 = _b64ToF32(A.audio[String(this.length)]);
+                if (f32.length >= this.length) return f32.subarray(0, this.length);
+            }
+            return _getChannelData.call(this, channel);
+        };
+    } catch(e) {}
+
+    // ── Timezone: en-US + America/New_York (consistent with language) ──
+    try {
+        const _resolved = Intl.DateTimeFormat.prototype.resolvedOptions;
+        Intl.DateTimeFormat.prototype.resolvedOptions = function() {
+            const o = _resolved.apply(this, arguments);
+            return { locale: 'en-US', calendar: o.calendar || 'gregory', numberingSystem: o.numberingSystem || 'latn', timeZone: 'America/New_York' };
+        };
+        const _getTZ = Date.prototype.getTimezoneOffset;
+        Date.prototype.getTimezoneOffset = function() { return 300; };
+    } catch(e) {}
+
+    // ── userAgentData (Client Hints) match UA ──
+    try {
+        const uaData = { brands: [{ brand: 'Chromium', version: '131' }, { brand: 'Google Chrome', version: '131' }, { brand: 'Not_A Brand', version: '24' }], mobile: false, platform: 'Windows', getHighEntropyValues: function() { return Promise.resolve({ brands: uaData.brands, mobile: false, platform: 'Windows', fullVersionList: uaData.brands, platformVersion: '10.0.0' }); } };
+        Object.defineProperty(Navigator.prototype, 'userAgentData', { get: function() { return uaData; }, configurable: true });
+    } catch(e) {}
+
+    // ── Navigator/Screen/Battery/Media/Plugins/Connection (unchanged from before) ──
+    try {
+        Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', { get: () => 8, configurable: true });
+        Object.defineProperty(Navigator.prototype, 'deviceMemory', { get: () => 8, configurable: true });
+        Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'Win32', configurable: true });
+        Object.defineProperty(Navigator.prototype, 'vendor', { get: () => 'Google Inc.', configurable: true });
+        Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { get: () => 0, configurable: true });
+        Object.defineProperty(Navigator.prototype, 'languages', { get: () => ['en-US', 'en'], configurable: true });
+        Object.defineProperty(Navigator.prototype, 'language', { get: () => 'en-US', configurable: true });
+    } catch(e) {}
+    try {
+        Object.defineProperty(Screen.prototype, 'width', { get: () => 1920, configurable: true });
+        Object.defineProperty(Screen.prototype, 'height', { get: () => 1080, configurable: true });
+        Object.defineProperty(Screen.prototype, 'availWidth', { get: () => 1920, configurable: true });
+        Object.defineProperty(Screen.prototype, 'availHeight', { get: () => 1040, configurable: true });
         Object.defineProperty(Screen.prototype, 'colorDepth', { get: () => 24, configurable: true });
         Object.defineProperty(Screen.prototype, 'pixelDepth', { get: () => 24, configurable: true });
     } catch(e) {}
-
-    // ── Timezone: Limit precision of resolvedOptions ──
+    try { Object.defineProperty(window, 'devicePixelRatio', { get: () => 1, configurable: true }); } catch(e) {}
     try {
-        const _ro = Intl.DateTimeFormat.prototype.resolvedOptions;
-        Intl.DateTimeFormat.prototype.resolvedOptions = function() {
-            const opts = _ro.apply(this, arguments);
-            // Keep timezone but remove narrowing locale variants
-            return opts;
-        };
+        if (navigator.getBattery) navigator.getBattery = function() { return Promise.resolve({ charging: true, chargingTime: Infinity, dischargingTime: Infinity, level: 1.0, addEventListener: function(){}, removeEventListener: function(){} }); };
     } catch(e) {}
-
-    // ── Battery API: Block entirely ──
     try {
-        if (navigator.getBattery) {
-            navigator.getBattery = function() {
-                return Promise.resolve({ charging: true, chargingTime: Infinity, dischargingTime: Infinity, level: 1.0,
-                    addEventListener: function(){}, removeEventListener: function(){} });
-            };
-        }
+        if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) navigator.mediaDevices.enumerateDevices = function() { return Promise.resolve([]); };
     } catch(e) {}
-
-    // ── Media Devices: Return empty list ──
-    try {
-        if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-            navigator.mediaDevices.enumerateDevices = function() { return Promise.resolve([]); };
-        }
-    } catch(e) {}
-
-    // ── Plugin list: Return empty ──
     try {
         Object.defineProperty(Navigator.prototype, 'plugins', { get: () => [], configurable: true });
         Object.defineProperty(Navigator.prototype, 'mimeTypes', { get: () => [], configurable: true });
     } catch(e) {}
-
-    // ── Connection API: Return generic values ──
     try {
         const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
         if (conn) {
@@ -680,6 +914,8 @@ namespace PrivacyMonitor
         }
     } catch(e) {}
 })();";
+            return script.Replace("__PM_ARTIFACTS_JSON__", artifactsJs);
+        }
 
         // ════════════════════════════════════════════
         //  SCRIPT / ELEMENT BLOCKER (pre-page JS)
@@ -809,6 +1045,58 @@ namespace PrivacyMonitor
         });
     });
     try { _obs.observe(document.documentElement, { childList: true, subtree: true }); } catch(e) {}
+})();";
+
+        /// <summary>Hides in-page ad containers and sponsored links by common id/class/data patterns. Reduces pop-ups and href/display ads.</summary>
+        public static string CosmeticFilterScript => @"
+(function() {
+    if (window.__pmCosmetic) return;
+    window.__pmCosmetic = true;
+    const _hidden = new WeakSet();
+    const _idClassPatterns = ['adsbygoogle','ad-container','ad_container','adcontainer','advertisement','ad-slot','ad_slot','adslot','ad-wrapper','ad_wrapper','adbox','ad-box','ad_area','ad-area','adplaceholder','ad-placeholder','ad-sense','adsense','google_ad','ins.adsbygoogle','sponsored','commercial','banner-ad','banner_ad','sidebar-ad','sidebar_ad','ad-placement','adplacement','ad-unit','adunit','ad-superbanner','ad-sky','ad-leaderboard','ad-interstitial','ad-overlay','ad-popup','adblock','ad-block','adblocker','outbrain','taboola','revcontent','content-ad','native-ad','promoted-content','dfp-ad','doubleclick','advertisement-label','ad-label','adlabel'];
+    const _dataAttrs = ['data-ad', 'data-ad-slot', 'data-google-query-id', 'data-ad-status', 'data-ad-unit', 'data-ad-format'];
+    function _matchesAd(el) {
+        if (!el || el.nodeType !== 1) return false;
+        try {
+            var id = (el.id || '').toLowerCase(), cls = (el.className && typeof el.className === 'string' ? el.className : '').toLowerCase();
+            for (var i = 0; i < _idClassPatterns.length; i++)
+                if (id.indexOf(_idClassPatterns[i]) >= 0 || cls.indexOf(_idClassPatterns[i]) >= 0) return true;
+            for (var j = 0; j < _dataAttrs.length; j++)
+                if (el.getAttribute && el.getAttribute(_dataAttrs[j]) !== null) return true;
+            if (el.tagName === 'IFRAME' && el.src) {
+                var s = (el.src || '').toLowerCase();
+                if (s.indexOf('doubleclick') >= 0 || s.indexOf('googlesyndication') >= 0 || s.indexOf('adservice') >= 0 || s.indexOf('/pagead/') >= 0 || s.indexOf('adsbygoogle') >= 0 || s.indexOf('adnxs') >= 0 || s.indexOf('criteo') >= 0 || s.indexOf('outbrain') >= 0 || s.indexOf('taboola') >= 0 || s.indexOf('revcontent') >= 0) return true;
+            }
+        } catch(e) {}
+        return false;
+    }
+    function _hideAdLike(root) {
+        try {
+            var list = (root || document).querySelectorAll ? (root || document).querySelectorAll('*') : [];
+            for (var i = 0; i < list.length; i++) {
+                var el = list[i];
+                if (_hidden.has(el)) continue;
+                if (_matchesAd(el)) {
+                    el.style.setProperty('display', 'none', 'important');
+                    el.setAttribute('data-pm-hidden', '1');
+                    _hidden.add(el);
+                }
+            }
+        } catch(e) {}
+    }
+    function _run() {
+        _hideAdLike(document);
+        try {
+            var obs = new MutationObserver(function(mutations) {
+                for (var m = 0; m < mutations.length; m++)
+                    for (var n = 0; n < (mutations[m].addedNodes || []).length; n++)
+                        _hideAdLike(mutations[m].addedNodes[n]);
+            });
+            obs.observe(document.documentElement, { childList: true, subtree: true });
+        } catch(e) {}
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _run);
+    else _run();
 })();";
 
         public static string BuildBlockerSeedScript(IEnumerable<string> hosts)
@@ -968,7 +1256,7 @@ namespace PrivacyMonitor
         private static readonly string[] AdTrackerPathSegments = new[]
         {
             "/pagead/", "/pagead2.", "/ads/", "/ad.", "/adservice", "/adsystem",
-            "/analytics", "/ga.js", "/gtm.js", "/gtag/", "/collect", "/g/collect",
+            "/analytics", "/ga.js", "/gtm.js", "/gtag/", "/collect", "/g/collect", "/j/collect", "/r/collect", "/s/collect",
             "/track", "/tracking", "/pixel", "/tr?", "/beacon", "/log", "/event",
             "/conversion", "/impression", "/click", "/view?", "/view.",
             "/doubleclick", "/googlesyndication", "/googleadservices",
@@ -977,7 +1265,19 @@ namespace PrivacyMonitor
             "/gtm/", "/gtag/js", "/ga/", "/analytics.js", "/stats.",
             "/pixel.", "/tracking.", "/tracker.", "/tag.", "/script/",
             "/b/ss", "/b/collect", "/everesttech", "/demdex", "/dpm.",
-            "/moat", "/doubleverify", "/adsafe", "/viewability"
+            "/moat", "/doubleverify", "/adsafe", "/viewability",
+            "/gtm-", "/fbevents", "/bat.js", "/smartsync", "/sync.", "/id/", "/idsync", "/matchid", "/user-match",
+            "/pagead/", "/ads?", "/ad?", "/view.", "/imp?", "/impression", "/click?", "/conv?", "/conversion",
+            "/delivery/", "/sync?", "/match?", "/bid?", "/prebid", "/hb_pb", "/hb_bidder", "/gdpr", "/consent",
+            "/vast", "/vpaid", "/video-ad", "/ad.js", "/ads.js", "/adscript", "/adsystem", "/getuid",
+            "/rta", "/rtb", "/prebid.", "/adsrvr", "/pxl.", "/px/", "/trk.", "/tracker.", "/pixel.", "/beacon.",
+            "/collect?", "/event?", "/log?", "/stats?", "/metric", "/telemetry", "/__utm", "/utm_",
+            "/fbq", "/fbevents", "/gtag", "/ga.js", "/analytics.js", "/gtm.js", "/g/collect", "/j/collect",
+            "/imp?", "/impression", "/view?", "/click?", "/conv?", "/conversion", "/sync?", "/match?",
+            "/b/collect", "/s/collect", "/r/collect", "/__imp", "/__n", "/pagead/", "/pagead2/",
+            "/ads?", "/adview", "/adrequest", "/adcall", "/adsystem", "/adserver", "/delivery",
+            "/tr?", "/pixel?", "/beacon?", "/1x1", "/blank.gif", "/transparent.gif", "/pixel.gif",
+            "/gtm-", "/gtag/js", "/fbevents.js", "/ga.js", "/ua-", "/gid/", "/gtm.js"
         };
 
         private static bool IsAdOrTrackerPath(string pathOrUrl)
@@ -987,6 +1287,56 @@ namespace PrivacyMonitor
             foreach (var seg in AdTrackerPathSegments)
             {
                 if (lower.Contains(seg, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        // Strong ad-block: block 3p domains whose hostname looks like ad/tracking infrastructure
+        private static readonly string[] AdLikeDomainParts = new[]
+        {
+            "ad.", "ads.", "adservice", "adserver", "adsystem", "ad-", "-ad.", "track.", "tracking.", "tracker.",
+            "pixel.", "pixels.", "analytics.", "metric", "metrics.", "telemetry.", "beacon.", "tag.", "tags.",
+            "collect.", "collector.", "tracking", "doubleclick", "googlesyndication", "adnxs", "pubmatic",
+            "criteo", "outbrain", "taboola", "mgid", "revcontent", "contentad", "adform", "media.net",
+            "adroll", "perfectaudience", "adsymptotic", "exelator", "demdex", "bluekai", "krxd", "rlcdn",
+            "scorecardresearch", "quantserve", "2mdn", "pagead", "syndication", "adtech", "adform",
+            "adsrvr", "mathtag", "rfihub", "rubicon", "openx", "casalemedia", "indexexchange", "bidswitch",
+            "adsymptotic", "moatads", "doubleverify", "adsafe", "flashtalking", "serving-sys", "amazon-adsystem",
+            "app-measurement", "firebase", "gtag", "gtm.", "googletag", "fbevents", "facebook.com/tr", "bat.bing",
+            "clarity.ms", "hotjar", "fullstory", "mouseflow", "segment.", "mixpanel", "amplitude", "heapanalytics"
+        };
+
+        /// <summary>High-confidence ad/tracker domain patterns — blocked even in BlockKnown mode.</summary>
+        private static readonly string[] StrongAdLikeDomainParts = new[]
+        {
+            "doubleclick", "googlesyndication", "googleadservices", "adservice.google", "pagead", "2mdn",
+            "adnxs", "appnexus", "pubmatic", "criteo", "outbrain", "taboola", "adsrvr", "mathtag",
+            "pixel.facebook", "facebook.net", "an.facebook", "bat.bing", "clarity.ms",
+            "demdex", "bluekai", "krxd", "rlcdn", "lotame", "crwdcntrl", "tapad", "agkn",
+            "scorecardresearch", "quantserve", "hotjar", "fullstory", "mouseflow", "smartlook", "logrocket",
+            "segment.io", "segment.com", "mixpanel", "amplitude", "heapanalytics", "googletagmanager", "gtm"
+        };
+
+        private static bool IsStrongAdLikeDomain(string host)
+        {
+            if (string.IsNullOrWhiteSpace(host) || host.Length < 6) return false;
+            var lower = host.ToLowerInvariant();
+            foreach (var part in StrongAdLikeDomainParts)
+            {
+                if (lower.Contains(part) || lower.StartsWith(part, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool IsAdLikeDomain(string host)
+        {
+            if (string.IsNullOrWhiteSpace(host) || host.Length < 6) return false;
+            var lower = host.ToLowerInvariant();
+            foreach (var part in AdLikeDomainParts)
+            {
+                if (lower.Contains(part) || lower.StartsWith(part, StringComparison.OrdinalIgnoreCase))
                     return true;
             }
             return false;

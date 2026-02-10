@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using System.Windows.Media;
 
 namespace PrivacyMonitor
@@ -208,6 +209,11 @@ namespace PrivacyMonitor
         public string HomePage { get; set; } = "about:welcome";
         public string Startup { get; set; } = "restore"; // "welcome" | "restore"
         public string SearchEngineUrl { get; set; } = "https://duckduckgo.com/?q=";
+        public bool BlockPopups { get; set; } = true;
+        public bool HideInPageAds { get; set; } = true;
+        /// <summary>Optional proxy URL so browsing uses the proxy IP instead of your public IP. e.g. http://127.0.0.1:8080 or socks5://127.0.0.1:1080. New tabs use this.</summary>
+        [JsonPropertyName("proxyUrl")]
+        public string ProxyUrl { get; set; } = "";
     }
 
     public class PrivacyScore

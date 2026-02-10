@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Net.Http;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -19,6 +20,30 @@ using Microsoft.Win32;
 
 namespace PrivacyMonitor
 {
+    /// <summary>Exposed to WebView2 script so Settings page can save without relying on postMessage (which may be blocked or unavailable for NavigateToString content).</summary>
+    public class SettingsSaveBridge
+    {
+        private readonly MainWindow _window;
+        private readonly BrowserTab _tab;
+
+        public SettingsSaveBridge(MainWindow window, BrowserTab tab) { _window = window; _tab = tab; }
+
+        public void Save(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return;
+            _window?.Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    _window.ApplySettingsFromJson(json);
+                    _window.SaveSettings();
+                    try { _tab?.WebView?.CoreWebView2?.NavigateToString(_window.GetSettingsHtml(showSavedMessage: true)); } catch { }
+                }
+                catch { }
+            });
+        }
+    }
+
     public partial class MainWindow : Window
     {
         private readonly List<BrowserTab> _tabs = new();
@@ -185,11 +210,15 @@ namespace PrivacyMonitor
             return sb.ToString();
         }
 
-        private string GetSettingsHtml()
+        internal string GetSettingsHtml(bool showSavedMessage = false)
         {
             string home = EscapeHtml(_settings.HomePage ?? "about:welcome");
             string startup = EscapeHtml(_settings.Startup ?? "restore");
             string search = EscapeHtml(_settings.SearchEngineUrl ?? "https://duckduckgo.com/?q=");
+            string bp = _settings.BlockPopups ? " checked" : "";
+            string hi = _settings.HideInPageAds ? " checked" : "";
+            string proxy = EscapeHtml(_settings.ProxyUrl ?? "");
+            string msgContent = showSavedMessage ? "Saved. Restart or open a new tab to apply." : "";
             return $@"<!DOCTYPE html><html><head><meta name='color-scheme' content='light dark'/><meta charset='utf-8'/><title>Settings</title><style>
             *{{margin:0;padding:0;box-sizing:border-box}}
             :root{{--bg:#fff;--text:#202124;--muted:#5F6368;--accent:#0891B2;--border:#E2E8F0}}
@@ -199,8 +228,8 @@ namespace PrivacyMonitor
             .header h1{{font-size:20px;font-weight:600}}
             .section{{margin:16px 0}}
             .section label{{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}}
-            .section input{{width:100%;max-width:400px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px}}
-            .section select{{padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px}}
+            .section input[type=text],.section select{{width:100%;max-width:400px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px}}
+            .section input[type=checkbox]{{margin-right:8px;vertical-align:middle}}
             .btn{{margin-top:16px;padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px}}
             .btn:hover{{opacity:0.9}}
             #msg{{margin-top:12px;font-size:12px;color:var(--muted)}}
@@ -209,15 +238,24 @@ namespace PrivacyMonitor
             <div class='section'><label>Home page (URL or about:welcome)</label><input type='text' id='homePage' value='{home}'/></div>
             <div class='section'><label>On startup</label><select id='startup'><option value='restore'{ (startup == "restore" ? " selected" : "") }>Restore previous session</option><option value='welcome'{ (startup == "welcome" ? " selected" : "") }>Open welcome page</option></select></div>
             <div class='section'><label>Search engine URL (use %s for query, or e.g. https://duckduckgo.com/?q=)</label><input type='text' id='searchEngineUrl' value='{search}'/></div>
-            <button class='btn' id='save'>Save</button>
-            <div id='msg'></div>
+            <div class='section'><label><input type='checkbox' id='blockPopups'{bp}/> Block pop-ups</label></div>
+            <div class='section'><label><input type='checkbox' id='hideInPageAds'{hi}/> Hide in-page ads (cosmetic filter)</label></div>
+            <div class='section'><label>Proxy (optional — hides your IP from sites)</label><input type='text' id='proxyUrl' value='{proxy}' placeholder='e.g. http://127.0.0.1:8080 or socks5://127.0.0.1:1080'/></div>
+            <button type='button' class='btn' id='save'>Save</button>
+            <div id='msg'>{msgContent}</div>
             <script>
             (function(){{
-                var home=document.getElementById('homePage'), start=document.getElementById('startup'), search=document.getElementById('searchEngineUrl'), save=document.getElementById('save'), msg=document.getElementById('msg');
-                save.onclick=function(){{
-                    var hp=home.value.trim()||'about:welcome', st=start.value, se=search.value.trim()||'https://duckduckgo.com/?q=';
-                    if(window.chrome&&window.chrome.webview) window.chrome.webview.postMessage(JSON.stringify({{cat:'settings',homePage:hp,startup:st,searchEngineUrl:se}}));
-                    msg.textContent='Saved. Restart or open a new tab to apply.';
+                var home=document.getElementById('homePage'), start=document.getElementById('startup'), search=document.getElementById('searchEngineUrl'), blockPopups=document.getElementById('blockPopups'), hideInPageAds=document.getElementById('hideInPageAds'), proxyUrl=document.getElementById('proxyUrl'), save=document.getElementById('save'), msgEl=document.getElementById('msg');
+                save.onclick=function(ev){{
+                    if(ev){{ ev.preventDefault(); ev.stopPropagation(); }}
+                    var hp=(home.value||'').trim()||'about:welcome', st=start.value||'restore', se=(search.value||'').trim()||'https://duckduckgo.com/?q=', px=(proxyUrl&&proxyUrl.value)?proxyUrl.value.trim():'';
+                    var msg={{cat:'settings',homePage:hp,startup:st,searchEngineUrl:se,blockPopups:blockPopups.checked,hideInPageAds:hideInPageAds.checked,proxyUrl:px}}, j=JSON.stringify(msg);
+                    try{{
+                        if(window.chrome&&window.chrome.webview&&window.chrome.webview.hostObjects&&window.chrome.webview.hostObjects.sync&&window.chrome.webview.hostObjects.sync.settingsBridge){{ window.chrome.webview.hostObjects.sync.settingsBridge.Save(j); return false; }}
+                        if(window.chrome&&window.chrome.webview&&window.chrome.webview.postMessage){{ window.chrome.webview.postMessage(j); return false; }}
+                    }}catch(e){{}}
+                    msgEl.textContent='Save failed. Use Settings from the app menu.';
+                    return false;
                 }};
             }})();
             </script></body></html>";
@@ -297,18 +335,77 @@ namespace PrivacyMonitor
         private static string BookmarksPath() => Path.Combine(AppDataDir(), "bookmarks.json");
         private static string RecentPath() => Path.Combine(AppDataDir(), "recent.json");
         private static string SettingsPath() => Path.Combine(AppDataDir(), "settings.json");
+        private static string ProxyPath() => Path.Combine(AppDataDir(), "proxy.txt");
+
         private void LoadSettings()
         {
             try
             {
-                if (File.Exists(SettingsPath()))
-                    _settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath())) ?? new AppSettings();
+                string path = SettingsPath();
+                if (File.Exists(path))
+                {
+                    string raw = File.ReadAllText(path);
+                    var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    _settings = JsonSerializer.Deserialize<AppSettings>(raw, opts) ?? new AppSettings();
+                    if (raw != null && !raw.Contains("BlockPopups", StringComparison.OrdinalIgnoreCase)) _settings.BlockPopups = true;
+                    if (raw != null && !raw.Contains("HideInPageAds", StringComparison.OrdinalIgnoreCase)) _settings.HideInPageAds = true;
+                    if (_settings.ProxyUrl == null) _settings.ProxyUrl = "";
+                }
+                else
+                    _settings = new AppSettings();
+
+                // Proxy: always load from dedicated file (source of truth) so it never gets lost
+                string proxyFile = ProxyPath();
+                if (File.Exists(proxyFile))
+                {
+                    try
+                    {
+                        string proxy = File.ReadAllText(proxyFile).Trim();
+                        if (!string.IsNullOrEmpty(proxy))
+                            _settings.ProxyUrl = proxy;
+                    }
+                    catch { }
+                }
             }
             catch { _settings = new AppSettings(); }
         }
-        private void SaveSettings()
+
+        /// <summary>Apply form data from settings page (JSON). Used by both postMessage and host-object Save.</summary>
+        internal void ApplySettingsFromJson(string json)
         {
-            try { File.WriteAllText(SettingsPath(), JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true })); } catch { }
+            if (string.IsNullOrWhiteSpace(json)) return;
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                _settings.HomePage = root.TryGetProperty("homePage", out var hp) ? hp.GetString() ?? "about:welcome" : "about:welcome";
+                _settings.Startup = root.TryGetProperty("startup", out var st) ? st.GetString() ?? "restore" : "restore";
+                _settings.SearchEngineUrl = root.TryGetProperty("searchEngineUrl", out var se) ? se.GetString() ?? "https://duckduckgo.com/?q=" : "https://duckduckgo.com/?q=";
+                if (root.TryGetProperty("blockPopups", out var bp)) _settings.BlockPopups = bp.ValueKind == JsonValueKind.True;
+                if (root.TryGetProperty("hideInPageAds", out var hi)) _settings.HideInPageAds = hi.ValueKind == JsonValueKind.True;
+                if (root.TryGetProperty("proxyUrl", out var px)) _settings.ProxyUrl = px.GetString() ?? "";
+            }
+            catch { }
+        }
+
+        internal void SaveSettings()
+        {
+            try
+            {
+                string dir = AppDataDir();
+                if (!Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                string path = SettingsPath();
+                var opts = new JsonSerializerOptions { WriteIndented = true };
+                File.WriteAllText(path, JsonSerializer.Serialize(_settings, opts));
+
+                // Proxy: always write to dedicated file so it persists across restarts
+                string proxyFile = ProxyPath();
+                string proxyValue = _settings.ProxyUrl?.Trim() ?? "";
+                File.WriteAllText(proxyFile, proxyValue);
+            }
+            catch { }
         }
 
         private void LoadBookmarks()
@@ -669,12 +766,61 @@ namespace PrivacyMonitor
             return AppContext.BaseDirectory;
         }
 
-        private static async Task<CoreWebView2Environment?> CreateWebView2EnvironmentAsync()
+        private static CoreWebView2EnvironmentOptions? BuildEnvironmentOptions(string? proxyUrl)
         {
-            string userDataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "PrivacyMonitor",
-                "WebView2");
+            if (string.IsNullOrWhiteSpace(proxyUrl)) return null;
+            string arg = "--proxy-server=" + proxyUrl.Trim();
+            return new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = arg };
+        }
+
+        /// <summary>Set when WebView2 started without proxy because creation with proxy failed (e.g. 0x8007139F). UI can show a message.</summary>
+        private static bool _webView2StartedWithoutProxyFallback;
+
+        private static async Task<CoreWebView2Environment?> CreateWebView2EnvironmentAsync(string? proxyUrl)
+        {
+            _webView2StartedWithoutProxyFallback = false;
+            var options = BuildEnvironmentOptions(proxyUrl);
+            var env = await CreateWebView2EnvironmentCoreAsync(options);
+            // If proxy was set and creation failed (e.g. 0x8007139F), retry without proxy so the app can start
+            if (env == null && options != null)
+            {
+                env = await CreateWebView2EnvironmentCoreAsync(null);
+                if (env != null) _webView2StartedWithoutProxyFallback = true;
+            }
+            if (env != null) return env;
+            throw new InvalidOperationException("WebView2 failed to start.");
+        }
+
+        private static async Task<CoreWebView2Environment?> CreateWebView2EnvironmentCoreAsync(CoreWebView2EnvironmentOptions? options)
+        {
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string userDataFolder = Path.Combine(localAppData, "PrivacyMonitor", "WebView2");
+            string userDataFolderRecovery = Path.Combine(localAppData, "PrivacyMonitor", "WebView2_Recovery");
+
+            async Task<CoreWebView2Environment?> TryCreateAsync(string? runtimePath, string dataFolder)
+            {
+                try
+                {
+                    if (runtimePath != null)
+                        return options != null
+                            ? await CoreWebView2Environment.CreateAsync(runtimePath, dataFolder, options)
+                            : await CoreWebView2Environment.CreateAsync(runtimePath, dataFolder);
+                    return options != null
+                        ? await CoreWebView2Environment.CreateAsync(null, dataFolder, options)
+                        : await CoreWebView2Environment.CreateAsync(null, dataFolder);
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            async Task<CoreWebView2Environment?> TryWithFallbackFolderAsync(string? runtimePath)
+            {
+                var env = await TryCreateAsync(runtimePath, userDataFolder);
+                if (env != null) return env;
+                return await TryCreateAsync(runtimePath, userDataFolderRecovery);
+            }
 
             // 1) Try bundled fixed runtime: exe dir, then BaseDirectory, then current directory
             string exeDir = GetExeDirectory();
@@ -687,41 +833,28 @@ namespace PrivacyMonitor
                 string fixedRuntimePath = Path.Combine(dir, "Microsoft.Web.WebView2.FixedVersionRuntime.win-x64");
                 if (Directory.Exists(bundledWebView2))
                 {
-                    try
-                    {
-                        return await CoreWebView2Environment.CreateAsync(bundledWebView2, userDataFolder);
-                    }
-                    catch
-                    {
-                        break; // fall through to system WebView2
-                    }
+                    var env = await TryWithFallbackFolderAsync(bundledWebView2);
+                    if (env != null) return env;
+                    break;
                 }
                 if (Directory.Exists(fixedRuntimePath))
                 {
-                    try
-                    {
-                        return await CoreWebView2Environment.CreateAsync(fixedRuntimePath, userDataFolder);
-                    }
-                    catch
-                    {
-                        break;
-                    }
+                    var env = await TryWithFallbackFolderAsync(fixedRuntimePath);
+                    if (env != null) return env;
+                    break;
                 }
             }
 
-            // 3) Try embedded WebView2 (extract from exe to LocalAppData on first run — single exe for any PC)
+            // 2) Try embedded WebView2 (extract from exe to LocalAppData on first run — single exe for any PC)
             string? extractedPath = await TryExtractEmbeddedWebView2Async();
             if (!string.IsNullOrEmpty(extractedPath))
             {
-                try
-                {
-                    return await CoreWebView2Environment.CreateAsync(extractedPath, userDataFolder);
-                }
-                catch { }
+                var env = await TryWithFallbackFolderAsync(extractedPath);
+                if (env != null) return env;
             }
 
-            // 4) Fallback: system WebView2 (Evergreen - installed with Edge or standalone)
-            return await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+            // 3) Fallback: system WebView2 (Evergreen - installed with Edge or standalone)
+            return await TryWithFallbackFolderAsync(null);
         }
 
         private static async Task<string?> TryExtractEmbeddedWebView2Async()
@@ -776,21 +909,32 @@ namespace PrivacyMonitor
 
             try
             {
-                var environment = await CreateWebView2EnvironmentAsync();
+                var environment = await CreateWebView2EnvironmentAsync(string.IsNullOrWhiteSpace(_settings.ProxyUrl) ? null : _settings.ProxyUrl.Trim());
                 await tab.WebView.EnsureCoreWebView2Async(environment);
                 tab.IsReady = true;
+                if (_webView2StartedWithoutProxyFallback && StatusText != null)
+                    StatusText.Text = "Started without proxy (WebView2 failed with proxy). Try clearing proxy in Settings or use a different proxy.";
                 var cw = tab.WebView.CoreWebView2;
                 cw.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
                 cw.WebResourceRequested += (s, e) => OnWebResourceRequested(tab, e);
                 cw.WebResourceResponseReceived += (s, e) => OnWebResourceResponseReceived(tab, e);
                 cw.WebMessageReceived += (s, e) => OnWebMessage(tab, e);
+                try { cw.AddHostObjectToScript("settingsBridge", new SettingsSaveBridge(this, tab)); } catch { }
                 cw.NavigationStarting += (s, e) => OnNavigationStarting(tab, e);
                 cw.NavigationCompleted += (s, e) => OnNavigationCompleted(tab, e);
                 cw.DownloadStarting += (s, e) => OnDownloadStarting(tab, e);
                 cw.ProcessFailed += (s, e) => OnProcessFailed(tab, e);
                 cw.DocumentTitleChanged += (s, e) => Dispatcher.Invoke(() => UpdateTabTitle(tab));
-                cw.NewWindowRequested += (s, e) => { e.Handled = true; Dispatcher.Invoke(async () => await CreateNewTab(e.Uri)); };
+                cw.NewWindowRequested += (s, e) =>
+                {
+                    e.Handled = true;
+                    if (_settings.BlockPopups)
+                        return; // Block pop-up entirely
+                    Dispatcher.Invoke(async () => await CreateNewTab(e.Uri));
+                };
                 await cw.AddScriptToExecuteOnDocumentCreatedAsync(ProtectionEngine.ElementBlockerBootstrapScript);
+                if (_settings.HideInPageAds)
+                    await cw.AddScriptToExecuteOnDocumentCreatedAsync(ProtectionEngine.CosmeticFilterScript);
 
                 SetWebView2ColorScheme(tab, _isDarkTheme);
 
@@ -804,6 +948,7 @@ namespace PrivacyMonitor
                     cw.NavigateToString(GetShortcutsHtml());
                 else
                     cw.Navigate(url);
+                await UpdatePerNavigationScriptsAsync(tab, ProtectionEngine.GetProfile(tab.CurrentHost ?? ""));
             }
             catch (Exception ex)
             {
@@ -1055,7 +1200,40 @@ namespace PrivacyMonitor
             if (e.Uri != null && e.Uri.StartsWith("about:settings", StringComparison.OrdinalIgnoreCase))
             {
                 e.Cancel = true;
-                Dispatcher.BeginInvoke(() => { try { tab.WebView?.CoreWebView2?.NavigateToString(GetSettingsHtml()); } catch { } });
+                string uri = e.Uri;
+                var tabCapture = tab;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        bool saved = false;
+                        if (uri.IndexOf("save=1", StringComparison.OrdinalIgnoreCase) >= 0 || uri.IndexOf("save=true", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            int q = uri.IndexOf('?');
+                            if (q >= 0 && q < uri.Length - 1)
+                            {
+                                string query = uri.Substring(q + 1);
+                                foreach (var pair in query.Split('&'))
+                                {
+                                    var parts = pair.Split('=', 2);
+                                    if (parts.Length != 2) continue;
+                                    string key = Uri.UnescapeDataString(parts[0].Trim());
+                                    string val = Uri.UnescapeDataString(parts[1].Replace('+', ' ').Trim());
+                                    if (key.Equals("homePage", StringComparison.OrdinalIgnoreCase)) _settings.HomePage = val ?? "about:welcome";
+                                    else if (key.Equals("startup", StringComparison.OrdinalIgnoreCase)) _settings.Startup = val ?? "restore";
+                                    else if (key.Equals("searchEngineUrl", StringComparison.OrdinalIgnoreCase)) _settings.SearchEngineUrl = val ?? "https://duckduckgo.com/?q=";
+                                    else if (key.Equals("blockPopups", StringComparison.OrdinalIgnoreCase)) _settings.BlockPopups = val.Equals("true", StringComparison.OrdinalIgnoreCase);
+                                    else if (key.Equals("hideInPageAds", StringComparison.OrdinalIgnoreCase)) _settings.HideInPageAds = val.Equals("true", StringComparison.OrdinalIgnoreCase);
+                                    else if (key.Equals("proxyUrl", StringComparison.OrdinalIgnoreCase)) _settings.ProxyUrl = val ?? "";
+                                }
+                                SaveSettings();
+                                saved = true;
+                            }
+                        }
+                        tabCapture.WebView?.CoreWebView2?.NavigateToString(GetSettingsHtml(showSavedMessage: saved));
+                    }
+                    catch { try { tabCapture.WebView?.CoreWebView2?.NavigateToString(GetSettingsHtml()); } catch { } }
+                }));
                 return;
             }
             if (e.Uri != null && e.Uri.StartsWith("about:shortcuts", StringComparison.OrdinalIgnoreCase))
@@ -1164,11 +1342,13 @@ namespace PrivacyMonitor
                     {
                         tab.AntiFpScriptId = await cw.AddScriptToExecuteOnDocumentCreatedAsync(ProtectionEngine.AntiFingerPrintScript);
                         tab.AntiFingerprintInjected = true;
+                        try { cw.Settings.UserAgent = ProtectionEngine.BlendInUserAgent; } catch { }
                     }
                     else
                     {
                         tab.AntiFpScriptId = null;
                         tab.AntiFingerprintInjected = false;
+                        try { cw.Settings.UserAgent = ""; } catch { }
                     }
                 }
                 catch { tab.AntiFpScriptId = null; }
@@ -1177,6 +1357,7 @@ namespace PrivacyMonitor
             {
                 tab.AntiFpScriptId = null;
                 tab.AntiFingerprintInjected = false;
+                try { cw.Settings.UserAgent = ""; } catch { }
             }
 
             try
@@ -1412,6 +1593,16 @@ namespace PrivacyMonitor
                             Dispatcher.BeginInvoke(() => tab.WebView.CoreWebView2.ExecuteScriptAsync(script));
                     }
                 }
+                else if (profile.AntiFingerprint && profile.Mode != ProtectionMode.Monitor)
+                {
+                    try
+                    {
+                        e.Request.Headers.SetHeader("Sec-CH-UA", "\"Chromium\";v=\"131\", \"Google Chrome\";v=\"131\", \"Not_A Brand\";v=\"24\"");
+                        e.Request.Headers.SetHeader("Sec-CH-UA-Mobile", "?0");
+                        e.Request.Headers.SetHeader("Sec-CH-UA-Platform", "\"Windows\"");
+                    }
+                    catch { }
+                }
 
                 // Adaptive learning: record tracker signals (exclude generic cross-site)
                 var trackerSignals = entry.Signals.Where(s =>
@@ -1461,6 +1652,7 @@ namespace PrivacyMonitor
                         if (tab.Requests[i].FullUrl == uri && tab.Requests[i].StatusCode == 0)
                         {
                             tab.Requests[i].StatusCode = statusCode; tab.Requests[i].ResponseHeaders = respHeaders;
+                            PrivacyEngine.AddResponseSignals(tab.Requests[i]); // ETag/cache-cookie tracking now that response is in
                             // Capture content-type and response size for evidence
                             if (respHeaders.TryGetValue("content-type", out var ct))
                                 tab.Requests[i].ContentType = ct;
@@ -1520,10 +1712,13 @@ namespace PrivacyMonitor
                 }
                 else if (cat == "settings")
                 {
-                    _settings.HomePage = root.TryGetProperty("homePage", out var hp) ? hp.GetString() ?? "about:welcome" : "about:welcome";
-                    _settings.Startup = root.TryGetProperty("startup", out var st) ? st.GetString() ?? "restore" : "restore";
-                    _settings.SearchEngineUrl = root.TryGetProperty("searchEngineUrl", out var se) ? se.GetString() ?? "https://duckduckgo.com/?q=" : "https://duckduckgo.com/?q=";
+                    ApplySettingsFromJson(e.WebMessageAsJson);
                     SaveSettings();
+                    var tabCapture = tab;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try { tabCapture.WebView?.CoreWebView2?.NavigateToString(GetSettingsHtml(showSavedMessage: true)); } catch { }
+                    }));
                 }
                 else if (cat == "clearHistory")
                 {
@@ -1594,6 +1789,14 @@ namespace PrivacyMonitor
             ScoreSummary.Text = _expertMode ? score.Summary : (score.NumericScore >= 80 ? "Good. Few trackers." : score.NumericScore >= 55 ? "Okay. Some other companies involved." : "Lots of tracking. You're protected.");
             ScoreChip.Text = $"Score {score.NumericScore}";
             TierChip.Text = score.TierLabel;
+            // High-risk warning (F or very low score)
+            bool highRisk = score.Grade == "F" || score.NumericScore < 40;
+            if (HighRiskWarningBorder != null)
+            {
+                HighRiskWarningBorder.Visibility = highRisk ? Visibility.Visible : Visibility.Collapsed;
+                if (HighRiskWarningText != null) HighRiskWarningText.Text = "High risk – consider leaving this site or avoid entering sensitive data.";
+            }
+            if (ReportPlainSummary != null) ReportPlainSummary.Text = GetReportPlainSummary(score, tab);
             UpdateScoreRing(score.NumericScore);
             try { var parent = ScoreBarFill.Parent as Grid; if (parent != null && parent.ActualWidth > 0) ScoreBarFill.Width = parent.ActualWidth * score.NumericScore / 100.0; else ScoreBarFill.Width = 0; } catch { }
             ScoreBarFill.Background = ScoreBadgeBg(score.NumericScore);
@@ -1795,6 +1998,15 @@ namespace PrivacyMonitor
             if (score.NumericScore >= 55) return "This page talks to several other companies. Normal for many sites.";
             if (tab.BlockedCount > 0) return "Lots of tracking here — we blocked some so you're protected.";
             return "This page has a lot of tracking. Use protection or browse elsewhere if you prefer.";
+        }
+
+        private static string GetReportPlainSummary(PrivacyScore score, BrowserTab tab)
+        {
+            if (tab.Requests.Count == 0) return "Load a page to see a plain-language summary.";
+            if (score.NumericScore >= 80) return "For humans: This site is okay for casual browsing; few trackers detected.";
+            if (score.NumericScore >= 60) return "For humans: This site talks to several other companies; normal for many sites.";
+            if (score.NumericScore >= 40) return "For humans: Significant tracking here; consider avoiding for sensitive tasks.";
+            return "For humans: Very invasive – high tracking and fingerprinting. Consider leaving or avoiding sensitive data.";
         }
 
         private void UpdateTierBanner(PrivacyScore score)
@@ -2317,7 +2529,40 @@ namespace PrivacyMonitor
         {
             var ver = Assembly.GetExecutingAssembly().GetName().Version;
             string version = ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "1.0.0";
-            MessageBox.Show(this, $"Privacy Monitor\nVersion {version}\n\nAgjencia per Informim dhe Privatesi.\nBuilt for Windows.", "About Privacy Monitor", MessageBoxButton.OK, MessageBoxImage.Information);
+            const string github = "https://github.com/NullSec8/PrivacyMonitor";
+            string msg = $"Privacy Monitor\nVersion {version}\n\nAgjencia per Informim dhe Privatesi. Built for Windows.\n\n" +
+                "All data stays on your PC. No telemetry.\n\n" +
+                "Open source: " + github;
+            MessageBox.Show(this, msg, "About Privacy Monitor", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private async void MenuCheckForUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            const string buildInfoUrl = "https://raw.githubusercontent.com/NullSec8/PrivacyMonitor/main/website/assets/build-info.json";
+            const string releasesUrl = "https://github.com/NullSec8/PrivacyMonitor/releases";
+            var ver = Assembly.GetExecutingAssembly().GetName().Version;
+            string current = ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "1.0.0";
+            try
+            {
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("User-Agent", "PrivacyMonitor/1.0");
+                string json = await client.GetStringAsync(buildInfoUrl).ConfigureAwait(true);
+                var doc = JsonDocument.Parse(json);
+                string? latest = doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
+                if (string.IsNullOrEmpty(latest)) { MessageBox.Show(this, "Could not read latest version.", "Check for updates", MessageBoxButton.OK, MessageBoxImage.Information); return; }
+                if (Version.TryParse(latest, out var latestVer) && Version.TryParse(current, out var currentVer) && latestVer > currentVer)
+                {
+                    var result = MessageBox.Show(this, $"A new version ({latest}) is available.\n\nCurrent: {current}\n\nOpen download page?", "Update available", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                    if (result == MessageBoxResult.Yes)
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(releasesUrl) { UseShellExecute = true });
+                }
+                else
+                    MessageBox.Show(this, $"You're up to date.\nVersion {current}", "Check for updates", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not check for updates.\n" + ex.Message, "Check for updates", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         private void BookmarksList_SelectionChanged(object sender, SelectionChangedEventArgs e)

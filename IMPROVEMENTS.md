@@ -79,6 +79,37 @@ A prioritized list of improvements: quick wins, privacy/security, convenience, a
 
 ---
 
+## Making the privacy engine stronger
+
+Ways to improve **PrivacyEngine**, **ProtectionEngine**, and **ForensicEngine** so detection and blocking are more accurate and comprehensive.
+
+### ✅ Implemented (recent)
+
+| Change | Where | Effect |
+|--------|--------|--------|
+| More tracking URL params | `PrivacyEngine` | `sid`, `uid`, `cid`, `_gac_`, `_gl`, `oaid`, `idt`, `_pk_`, `_sp_`, `distinct_id`, `ajs_` now flagged. |
+| More heuristic paths | `PrivacyEngine.DetectTrackerFull` | `/g/collect`, `/j/collect`, `/r/collect`, `/s/collect`, `/gtm.js`, `/gtm-`, `/ga.js`, `/fbevents`, `/b/collect` etc. |
+| Third-party script signal | `PrivacyEngine.AnalyzeRequest` | Every 3p script gets a `third_party_script` signal; score penalizes many 3p scripts. |
+| ETag tracking detection | `PrivacyEngine.DetectEtagTracking` | High-entropy ETag on 3p responses → `etag_tracking` signal + GDPR finding. |
+| Scoring: 3p scripts + ETag | `PrivacyEngine.CalculateScore` | Penalties for third-party script count and ETag tracking. |
+| Faster learned-tracker promotion | `ProtectionEngine` | 4 observations (was 5); 2 sites (was 3) to confirm a learned tracker. |
+| More path segments for Aggressive | `ProtectionEngine.AdTrackerPathSegments` | `/j/collect`, `/r/collect`, `/s/collect`, `/gtm-`, `/bat.js`, `/smartsync`, `/idsync`, `/matchid`, `/user-match` etc. |
+
+### Roadmap (future)
+
+| Idea | Effort | Notes |
+|------|--------|--------|
+| **Expand tracker DB** | Low–Medium | Add more domains (regional ad nets, smaller analytics, CDNs that double as trackers). |
+| **Redirect-chain blocking** | Medium | If a request redirects to a known tracker, block the initial request or count as tracker. |
+| **Import external blocklist** | Medium | Optional: fetch EasyList / uBlock-style list, merge into blocklist or use as second layer. |
+| **Strip 3p cookies** | Medium | Option to strip `Cookie` header on third-party requests (stricter than blocking by host). |
+| **More fingerprint hooks** | Low | Extra JS hooks (e.g. more Navigator/Screen props, Hmac/crypto subtle). |
+| **Suspicious script host** | Low | Heuristic: 3p script from non-CDN domain → higher confidence in tracking. |
+| **Storage key patterns** | Low | Classify localStorage/sessionStorage keys as tracking (e.g. `_ga`, `_fbp`) in storage scan. |
+| **Request volume to tracker** | Low | In scoring, consider number of requests to same tracker domain (volume, not just unique count). |
+
+---
+
 ## Suggested order to tackle
 
 1. **Alt+Left / Alt+Right** — Very small change, big UX gain.  

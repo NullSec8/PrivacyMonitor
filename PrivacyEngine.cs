@@ -240,6 +240,54 @@ namespace PrivacyMonitor
                 ("tealiumiq.com",          "Tealium",                   "Tealium",     TrackerCategory.Analytics,  3),
                 ("tags.tiqcdn.com",        "Tealium CDN",               "Tealium",     TrackerCategory.Analytics,  3),
                 ("ensighten.com",          "Ensighten",                 "Ensighten",   TrackerCategory.Analytics,  3),
+
+                // ── Native / content ad networks ──
+                ("mgid.com",               "MGID Native Ads",           "MGID",        TrackerCategory.Advertising, 5),
+                ("mgid.io",                "MGID",                      "MGID",        TrackerCategory.Advertising,  5),
+                ("revcontent.com",         "Revcontent",                "Revcontent",   TrackerCategory.Advertising, 4),
+                ("revcontent.io",          "Revcontent",                "Revcontent",   TrackerCategory.Advertising, 4),
+                ("zergnet.com",            "Zergnet",                   "Zergnet",     TrackerCategory.Advertising, 4),
+                ("content.ad",             "Content.ad",                "Content.ad",   TrackerCategory.Advertising, 4),
+                ("undertone.com",          "Undertone",                 "Undertone",   TrackerCategory.Advertising, 4),
+                ("gravity.com",            "Gravity",                   "AOL",         TrackerCategory.Advertising, 3),
+                ("adcolony.com",           "AdColony",                  "AdColony",    TrackerCategory.Advertising, 4),
+                ("unity3d.com",            "Unity Ads",                 "Unity",       TrackerCategory.Advertising, 4),
+                ("vungle.com",             "Vungle",                    "Liftoff",     TrackerCategory.Advertising, 4),
+                ("inmobi.com",             "InMobi",                    "InMobi",      TrackerCategory.Advertising, 4),
+                ("chartboost.com",         "Chartboost",                "Chartboost",   TrackerCategory.Advertising, 3),
+                ("fyber.com",              "Fyber",                     "Digital Turbine", TrackerCategory.Advertising, 4),
+                ("tapjoy.com",             "Tapjoy",                    "Tapjoy",      TrackerCategory.Advertising, 4),
+                ("leadbolt.net",           "Leadbolt",                  "Leadbolt",    TrackerCategory.Advertising, 3),
+                ("spotxchange.com",        "SpotX",                     "Magnite",     TrackerCategory.Advertising, 4),
+                ("spotx.tv",               "SpotX",                     "Magnite",     TrackerCategory.Advertising, 4),
+                ("freewheel.tv",           "FreeWheel",                 "Comcast",     TrackerCategory.Advertising, 4),
+                ("stickyadstv.com",        "Sticky Ads",                "Comcast",     TrackerCategory.Advertising, 4),
+                ("teads.tv",               "Teads",                     "Teads",       TrackerCategory.Advertising, 4),
+                ("outbrain.com",           "Outbrain",                  "Outbrain",    TrackerCategory.Advertising, 4),
+                ("zemanta.com",            "Zemanta",                   "Outbrain",    TrackerCategory.Advertising, 3),
+                ("connatix.com",           "Connatix",                  "Connatix",   TrackerCategory.Advertising, 3),
+                ("taboola.com",            "Taboola",                   "Taboola",    TrackerCategory.Advertising, 4),
+                ("taboolasyndication.com", "Taboola Syndication",       "Taboola",    TrackerCategory.Advertising, 4),
+                ("connextra.com",          "Connextra",                 "Connextra",   TrackerCategory.Advertising, 3),
+                ("contentrecommendation.net", "Content Rec",            "Various",     TrackerCategory.Advertising, 3),
+                ("bidtellect.com",         "BidTellect",                "BidTellect",   TrackerCategory.Advertising, 4),
+                ("advertising.amazon.com", "Amazon DSP",                "Amazon",      TrackerCategory.Advertising, 4),
+                ("ads.tiktok.com",         "TikTok Ads",                "ByteDance",   TrackerCategory.Advertising, 5),
+                ("ads-api.tiktok.com",     "TikTok Ads API",            "ByteDance",   TrackerCategory.Advertising, 5),
+                ("business-api.tiktok.com","TikTok Business",           "ByteDance",   TrackerCategory.Advertising, 4),
+                ("reddit.com/static/ads",   "Reddit Ads",                "Reddit",      TrackerCategory.Advertising, 4),
+                ("ads.reddit.com",         "Reddit Ads",                "Reddit",      TrackerCategory.Advertising, 4),
+                ("events.redditmedia.com", "Reddit Analytics",         "Reddit",      TrackerCategory.Analytics,  4),
+                ("branch.io",              "Branch",                    "Branch",      TrackerCategory.Attribution, 3),
+                ("app.link",               "Branch Deep Links",         "Branch",      TrackerCategory.Attribution, 3),
+                ("singular.net",           "Singular",                  "Singular",    TrackerCategory.Attribution, 4),
+                ("appsflyer.com",          "AppsFlyer",                 "AppsFlyer",   TrackerCategory.Attribution, 4),
+                ("adjust.com",             "Adjust",                    "Adjust",      TrackerCategory.Attribution, 4),
+                ("kochava.com",            "Kochava",                   "Kochava",     TrackerCategory.Attribution, 4),
+                ("braze.com",              "Braze",                     "Braze",       TrackerCategory.Analytics,  4),
+                ("cdn.braze.com",          "Braze CDN",                 "Braze",       TrackerCategory.Analytics,  4),
+                ("clevertap.com",          "CleverTap",                 "CleverTap",   TrackerCategory.Analytics,  4),
+                ("wizrocket.com",          "WizRocket",                 "CleverTap",   TrackerCategory.Analytics,  3),
             };
 
             TrackerDatabase = raw.Select(r => new TrackerInfo
@@ -281,7 +329,13 @@ namespace PrivacyMonitor
             "cmpid", "irclickid", "zanpid", "gbraid", "wbraid",
             "vero_id", "oly_enc_id", "oly_anon_id", "_hsenc", "_hsmi",
             "mc_cid", "mc_eid", "mkt_tok", "trk_contact", "trk_msg",
-            "si", "ict", "_kx", "hsa_", "ref_"
+            "si", "ict", "_kx", "hsa_", "ref_",
+            "sid", "uid", "cid", "_gac_", "_gl", "oaid", "idt", "_pk_", "_sp_", "distinct_id", "ajs_",
+            "trk", "trk_", "track", "tracking", "clickid", "campaign", "affiliate", "ref",
+            "_ref", "source", "medium", "content", "term", "campaign_id", "ad_id", "placement",
+            "adset", "ad_id", "fb_action_ids", "fb_source", "sc_cid", "mc_cid", "_hsq",
+            "redirect_mid", "redirect_log_mid", "_bta_c", "_bta_t", "vero_conv", "_branch_match_id",
+            "tapad_id", "lr_id", "lr_enc", "om_campaign", "om_channel", "_gl", "gclsrc"
         };
 
         // ════════════════════════════════════════════
@@ -328,7 +382,10 @@ namespace PrivacyMonitor
             "metrics", "analytics", "track", "pixel", "data", "log", "tag",
             "collect", "beacon", "telemetry", "stats", "measure", "report",
             "event", "hit", "counter", "insight", "monitor", "pulse", "signal",
-            "trk", "t", "px", "img", "srv", "cdn-cgi", "rum"
+            "trk", "t", "px", "img", "srv", "cdn-cgi", "rum",
+            "ad", "ads", "adserver", "adservice", "adsystem", "tracking", "tracker",
+            "imp", "view", "click", "conv", "sync", "match", "bid", "delivery",
+            "gtm", "gtag", "ga", "fbevents", "fbq", "tr", "gdm", "pagead"
         };
 
         private static readonly Regex HighEntropyPattern = new(@"[A-Za-z0-9+/=_-]{24,}", RegexOptions.Compiled);
@@ -630,16 +687,24 @@ namespace PrivacyMonitor
                 if (t.Domain.Contains('/') && lower.Contains(t.Domain))
                     return new TrackerMatch { Info = t, MatchType = "domain", Confidence = 0.90 };
             }
-            // 3) Heuristic path patterns
+            // 3) Heuristic path patterns (expanded for stronger detection)
             if (lower.Contains("/collect?") || lower.Contains("/pixel?") || lower.Contains("/beacon?") ||
                 lower.Contains("/track?") || lower.Contains("/log?") || lower.Contains("/event?") ||
                 lower.Contains("/__imp?") || lower.Contains("/t.gif") || lower.Contains("/p.gif") ||
                 lower.Contains("/pixel.gif") || lower.Contains("/1x1.gif") || lower.Contains("/pixel.png") ||
-                lower.Contains("/tr?") || lower.Contains("/impression?") || lower.Contains("/analytics.js") ||
-                lower.Contains("/gtag/js") || lower.Contains("/beacon/") || lower.Contains("/telemetry"))
+                lower.Contains("/tr?") || lower.Contains("/impression?") || lower.Contains("/imp?") ||
+                lower.Contains("/analytics.js") || lower.Contains("/gtag/js") || lower.Contains("/beacon/") || lower.Contains("/telemetry") ||
+                lower.Contains("/g/collect") || lower.Contains("/j/collect") || lower.Contains("/r/collect") || lower.Contains("/s/collect") ||
+                lower.Contains("/gtm.js") || lower.Contains("/gtm-") || lower.EndsWith("/ga.js") || lower.Contains("/ga/") ||
+                lower.Contains("/fbevents") || lower.Contains("/tr?id=") || lower.Contains("/px.") || lower.Contains("/b/collect") ||
+                lower.Contains("/view?") || lower.Contains("/click?") || lower.Contains("/conv?") || lower.Contains("/sync?") ||
+                lower.Contains("/match?") || lower.Contains("/delivery") || lower.Contains("/pagead/") || lower.Contains("/pagead2/") ||
+                lower.Contains("/ad.js") || lower.Contains("/ads.js") || lower.Contains("/adrequest") || lower.Contains("/adcall") ||
+                lower.Contains("/vast") || lower.Contains("/vpaid") || lower.Contains("/hb_pb") || lower.Contains("/hb_bidder") ||
+                lower.Contains("/__n") || lower.Contains("/blank.gif") || lower.Contains("/transparent.gif"))
             {
                 var heuristic = new TrackerInfo { Domain = host, Label = "Suspected Tracker (heuristic)", Company = "Unknown", Category = TrackerCategory.Other, RiskWeight = 2 };
-                return new TrackerMatch { Info = heuristic, MatchType = "heuristic", Confidence = 0.65 };
+                return new TrackerMatch { Info = heuristic, MatchType = "heuristic", Confidence = 0.68 };
             }
             return null;
         }
@@ -725,6 +790,25 @@ namespace PrivacyMonitor
             // 5) Pixel/beacon detection (small third-party requests)
             if (req.IsThirdParty)
                 DetectPixelTracking(req, signals);
+
+            // 5b) Third-party script: executable code from external domain (tracking vector)
+            if (req.IsThirdParty && string.Equals(req.ResourceContext, "Script", StringComparison.OrdinalIgnoreCase))
+            {
+                signals.Add(new DetectionSignal
+                {
+                    SignalType = "third_party_script",
+                    Source = req.Host,
+                    Detail = $"Third-party script loaded from {req.Host} — can track behavior and fingerprint",
+                    Confidence = 0.62,
+                    Risk = RiskType.Tracking,
+                    Severity = 2,
+                    Evidence = $"Script from {req.Host}",
+                    GdprArticle = "Art. 5(1)(a)"
+                });
+            }
+
+            // 5c) ETag-based tracking (cache cookie)
+            DetectEtagTracking(req, signals);
 
             // 6) Data classification
             req.DataClassifications = ClassifyRequestData(req);
@@ -841,7 +925,9 @@ namespace PrivacyMonitor
             var lower = req.FullUrl.ToLowerInvariant();
             bool isPixelUrl = lower.EndsWith(".gif") || lower.EndsWith(".png") || lower.EndsWith("pixel") ||
                               lower.Contains("/pixel") || lower.Contains("/1x1") || lower.Contains("/p.gif") ||
-                              lower.Contains("/t.gif") || lower.Contains("/beacon") || lower.Contains(".gif?");
+                              lower.Contains("/t.gif") || lower.Contains("/beacon") || lower.Contains(".gif?") ||
+                              lower.Contains("/imp?") || lower.Contains("/view?") || lower.Contains("/blank.gif") ||
+                              lower.Contains("/transparent.gif") || lower.Contains("/__imp") || lower.Contains("/tr?");
             if (isPixelUrl)
             {
                 signals.Add(new DetectionSignal
@@ -854,6 +940,38 @@ namespace PrivacyMonitor
                     Severity = 3,
                     Evidence = $"URL pattern: {req.Path[..Math.Min(80, req.Path.Length)]}",
                     GdprArticle = "Art. 5(1)(a)"
+                });
+            }
+        }
+
+        /// <summary>Call when response headers are available (e.g. after GetResponse) to add ETag/cache-cookie signals.</summary>
+        public static void AddResponseSignals(RequestEntry req)
+        {
+            if (req?.Signals == null) return;
+            DetectEtagTracking(req, req.Signals);
+        }
+
+        private static void DetectEtagTracking(RequestEntry req, List<DetectionSignal> signals)
+        {
+            if (!req.IsThirdParty) return;
+            if (req.ResponseHeaders == null || req.ResponseHeaders.Count == 0) return;
+            if (!req.ResponseHeaders.TryGetValue("etag", out var etag) && !req.ResponseHeaders.TryGetValue("ETag", out etag))
+                return;
+            etag = etag?.Trim(' ', '"');
+            if (string.IsNullOrEmpty(etag) || etag.Length < 20) return;
+            double entropy = ShannonEntropy(etag);
+            if (entropy >= 3.5 || Base64Payload.IsMatch(etag) || HexPayload.IsMatch(etag))
+            {
+                signals.Add(new DetectionSignal
+                {
+                    SignalType = "etag_tracking",
+                    Source = req.Host,
+                    Detail = "ETag looks like a tracking identifier — cache-based re-identification (cache cookie)",
+                    Confidence = 0.72,
+                    Risk = RiskType.Tracking,
+                    Severity = 4,
+                    Evidence = $"ETag length={etag.Length}, entropy={entropy:F2}",
+                    GdprArticle = "Art. 5(1)(c)"
                 });
             }
         }
@@ -1083,6 +1201,12 @@ namespace PrivacyMonitor
                     Description = $"{highEntropy} URL parameters contain high-entropy data consistent with obfuscated tracking IDs.",
                     Severity = "Medium", Count = highEntropy });
 
+            int etagTracking = scan.AllSignals.Count(s => s.SignalType == "etag_tracking");
+            if (etagTracking > 0)
+                findings.Add(new GdprFinding { Article = "Art. 5(1)(c)", Title = "ETag / Cache Tracking", TitleSq = "Gjurmim me ETag/Cache",
+                    Description = $"{etagTracking} response(s) use ETag that resembles a tracking identifier (cache cookie). Re-identification without consent.",
+                    Severity = "High", Count = etagTracking });
+
             int extDomains = scan.Requests.Where(r => r.IsThirdParty).Select(r => r.Host)
                 .Where(h => h.EndsWith(".com") || h.EndsWith(".net") || h.EndsWith(".io") || h.EndsWith(".org")).Distinct().Count();
             if (extDomains > 3)
@@ -1201,6 +1325,16 @@ namespace PrivacyMonitor
             if (cnamePenalty > 0) { score -= cnamePenalty; breakdown["CNAME suspects"] = -cnamePenalty; }
             int entropyPenalty = Math.Min(8, scan.AllSignals.Count(s => s.SignalType == "high_entropy_param") / 3);
             if (entropyPenalty > 0) { score -= entropyPenalty; breakdown["Obfuscated IDs"] = -entropyPenalty; }
+
+            // ── Third-party scripts (tracking vector) ──
+            int thirdPartyScripts = scan.AllSignals.Count(s => s.SignalType == "third_party_script");
+            int scriptPenalty = Math.Min(10, (int)(2.5 * Math.Sqrt(Math.Max(0, thirdPartyScripts))));
+            if (scriptPenalty > 0) { score -= scriptPenalty; catScores["Tracking"] -= scriptPenalty; breakdown["Third-party scripts"] = -scriptPenalty; }
+
+            // ── ETag / cache-cookie tracking ──
+            int etagCount = scan.AllSignals.Count(s => s.SignalType == "etag_tracking");
+            int etagPenalty = Math.Min(8, etagCount * 4);
+            if (etagPenalty > 0) { score -= etagPenalty; breakdown["ETag tracking"] = -etagPenalty; }
 
             // Clamp
             score = Math.Max(0, Math.Min(100, score));
