@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -60,6 +61,10 @@ namespace PrivacyMonitor
         private List<BookmarkEntry> _bookmarks = new();
         private AppSettings _settings = new();
         private readonly bool _isPrivate;
+        /// <summary>In-memory site profiles for private window; null for normal window.</summary>
+        private readonly ConcurrentDictionary<string, SiteProfile>? _privateProfiles = null;
+        /// <summary>Temp WebView2 user data folder for private window (cookies/storage not persisted).</summary>
+        private string? _privateUserDataFolder;
         private List<(string Title, string Url, DateTime Visited)> _recentUrls = new();
         private const int MaxRecent = 50;
 
@@ -309,8 +314,7 @@ namespace PrivacyMonitor
             _uiTimer.Start();
 
             Closing += MainWindow_Closing;
-            LoadBookmarks();
-            LoadRecent();
+            if (!_isPrivate) { LoadBookmarks(); LoadRecent(); }
             LoadSettings();
             Loaded += async (_, _) => await RestoreOrWelcomeAsync();
         }
@@ -318,12 +322,16 @@ namespace PrivacyMonitor
         public MainWindow(bool isPrivate) : this()
         {
             _isPrivate = isPrivate;
+            _privateProfiles = isPrivate ? new ConcurrentDictionary<string, SiteProfile>(StringComparer.OrdinalIgnoreCase) : null;
             if (isPrivate && PrivateModeIndicator != null)
             {
                 PrivateModeIndicator.Visibility = Visibility.Visible;
                 if (TabBarBorder != null) TabBarBorder.Background = new SolidColorBrush(Color.FromRgb(0x5C, 0x4D, 0x7A)); // purple tint for private
             }
         }
+
+        /// <summary>Ephemeral profile store for private window; null for normal window (use global persisted profiles).</summary>
+        private ConcurrentDictionary<string, SiteProfile>? GetProfileStore() => _privateProfiles;
 
         private static string AppDataDir()
         {
@@ -390,6 +398,7 @@ namespace PrivacyMonitor
 
         internal void SaveSettings()
         {
+            if (_isPrivate) return;
             try
             {
                 string dir = AppDataDir();
@@ -410,6 +419,7 @@ namespace PrivacyMonitor
 
         private void LoadBookmarks()
         {
+            if (_isPrivate) return;
             try
             {
                 if (File.Exists(BookmarksPath()))
@@ -419,10 +429,12 @@ namespace PrivacyMonitor
         }
         private void SaveBookmarks()
         {
+            if (_isPrivate) return;
             try { File.WriteAllText(BookmarksPath(), JsonSerializer.Serialize(_bookmarks, new JsonSerializerOptions { WriteIndented = true })); } catch { }
         }
         private void LoadRecent()
         {
+            if (_isPrivate) return;
             try
             {
                 if (File.Exists(RecentPath()))
@@ -451,6 +463,7 @@ namespace PrivacyMonitor
         }
         private void SaveRecent()
         {
+            if (_isPrivate) return;
             try { File.WriteAllText(RecentPath(), JsonSerializer.Serialize(_recentUrls.Select(t => new { t.Title, t.Url, Visited = t.Visited.ToString("O") }))); } catch { }
         }
 
@@ -634,9 +647,9 @@ namespace PrivacyMonitor
             if (tab != null)
             {
                 if (!string.IsNullOrEmpty(tab.CurrentHost))
-                    ProtectionEngine.SetMode(tab.CurrentHost, mode);
+                    ProtectionEngine.SetMode(tab.CurrentHost, mode, GetProfileStore());
                 UpdateProtectionUI(tab);
-                var profile = ProtectionEngine.GetProfile(tab.CurrentHost);
+                var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
                 _ = UpdatePerNavigationScriptsAsync(tab, profile);
                 _ = ApplyRuntimeBlockerAsync(tab, profile);
             }
@@ -648,9 +661,9 @@ namespace PrivacyMonitor
             var tab = ActiveTab;
             if (tab != null && !string.IsNullOrEmpty(tab.CurrentHost))
             {
-                var profile = ProtectionEngine.GetProfile(tab.CurrentHost);
+                var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
                 profile.AntiFingerprint = !profile.AntiFingerprint;
-                ProtectionEngine.SetProfile(tab.CurrentHost, profile);
+                ProtectionEngine.SetProfile(tab.CurrentHost, profile, GetProfileStore());
                 _antiFpEnabled = profile.AntiFingerprint;
                 UpdateAntiFpButton();
                 _ = UpdatePerNavigationScriptsAsync(tab, profile);
@@ -662,9 +675,9 @@ namespace PrivacyMonitor
             var tab = ActiveTab;
             if (tab != null && !string.IsNullOrEmpty(tab.CurrentHost))
             {
-                var profile = ProtectionEngine.GetProfile(tab.CurrentHost);
+                var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
                 profile.BlockAdsTrackers = !profile.BlockAdsTrackers;
-                ProtectionEngine.SetProfile(tab.CurrentHost, profile);
+                ProtectionEngine.SetProfile(tab.CurrentHost, profile, GetProfileStore());
                 _adBlockEnabled = profile.BlockAdsTrackers;
                 UpdateAdBlockButton();
                 _ = ApplyRuntimeBlockerAsync(tab, profile);
@@ -675,11 +688,11 @@ namespace PrivacyMonitor
 
         private void UpdateProtectionUI(BrowserTab tab)
         {
-            var mode = ProtectionEngine.GetEffectiveMode(tab.CurrentHost);
+            var mode = ProtectionEngine.GetEffectiveMode(tab.CurrentHost, GetProfileStore());
             SetProtectionMenuChecked(mode);
 
             // Update per-site toggles
-            var profile = ProtectionEngine.GetProfile(tab.CurrentHost);
+            var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
             _antiFpEnabled = profile.AntiFingerprint;
             _adBlockEnabled = profile.BlockAdsTrackers;
             UpdateAntiFpButton();
@@ -776,25 +789,25 @@ namespace PrivacyMonitor
         /// <summary>Set when WebView2 started without proxy because creation with proxy failed (e.g. 0x8007139F). UI can show a message.</summary>
         private static bool _webView2StartedWithoutProxyFallback;
 
-        private static async Task<CoreWebView2Environment?> CreateWebView2EnvironmentAsync(string? proxyUrl)
+        private static async Task<CoreWebView2Environment?> CreateWebView2EnvironmentAsync(string? proxyUrl, string? userDataFolderOverride = null)
         {
             _webView2StartedWithoutProxyFallback = false;
             var options = BuildEnvironmentOptions(proxyUrl);
-            var env = await CreateWebView2EnvironmentCoreAsync(options);
+            var env = await CreateWebView2EnvironmentCoreAsync(options, userDataFolderOverride);
             // If proxy was set and creation failed (e.g. 0x8007139F), retry without proxy so the app can start
-            if (env == null && options != null)
+            if (env == null && options != null && userDataFolderOverride == null)
             {
-                env = await CreateWebView2EnvironmentCoreAsync(null);
+                env = await CreateWebView2EnvironmentCoreAsync(null, null);
                 if (env != null) _webView2StartedWithoutProxyFallback = true;
             }
             if (env != null) return env;
             throw new InvalidOperationException("WebView2 failed to start.");
         }
 
-        private static async Task<CoreWebView2Environment?> CreateWebView2EnvironmentCoreAsync(CoreWebView2EnvironmentOptions? options)
+        private static async Task<CoreWebView2Environment?> CreateWebView2EnvironmentCoreAsync(CoreWebView2EnvironmentOptions? options, string? userDataFolderOverride = null)
         {
             string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string userDataFolder = Path.Combine(localAppData, "PrivacyMonitor", "WebView2");
+            string userDataFolder = userDataFolderOverride ?? Path.Combine(localAppData, "PrivacyMonitor", "WebView2");
             string userDataFolderRecovery = Path.Combine(localAppData, "PrivacyMonitor", "WebView2_Recovery");
 
             async Task<CoreWebView2Environment?> TryCreateAsync(string? runtimePath, string dataFolder)
@@ -819,6 +832,7 @@ namespace PrivacyMonitor
             {
                 var env = await TryCreateAsync(runtimePath, userDataFolder);
                 if (env != null) return env;
+                if (userDataFolderOverride != null) return null;
                 return await TryCreateAsync(runtimePath, userDataFolderRecovery);
             }
 
@@ -909,7 +923,13 @@ namespace PrivacyMonitor
 
             try
             {
-                var environment = await CreateWebView2EnvironmentAsync(string.IsNullOrWhiteSpace(_settings.ProxyUrl) ? null : _settings.ProxyUrl.Trim());
+                string? proxy = string.IsNullOrWhiteSpace(_settings.ProxyUrl) ? null : _settings.ProxyUrl.Trim();
+                if (_isPrivate)
+                {
+                    _privateUserDataFolder ??= Path.Combine(Path.GetTempPath(), "PrivacyMonitor_Private", Guid.NewGuid().ToString("N"));
+                    if (!Directory.Exists(_privateUserDataFolder)) Directory.CreateDirectory(_privateUserDataFolder);
+                }
+                var environment = await CreateWebView2EnvironmentAsync(proxy, _isPrivate ? _privateUserDataFolder : null);
                 await tab.WebView.EnsureCoreWebView2Async(environment);
                 tab.IsReady = true;
                 if (_webView2StartedWithoutProxyFallback && StatusText != null)
@@ -948,7 +968,7 @@ namespace PrivacyMonitor
                     cw.NavigateToString(GetShortcutsHtml());
                 else
                     cw.Navigate(url);
-                await UpdatePerNavigationScriptsAsync(tab, ProtectionEngine.GetProfile(tab.CurrentHost ?? ""));
+                await UpdatePerNavigationScriptsAsync(tab, ProtectionEngine.GetProfile(tab.CurrentHost ?? "", GetProfileStore()));
             }
             catch (Exception ex)
             {
@@ -996,6 +1016,13 @@ namespace PrivacyMonitor
             try { tab.WebView.Dispose(); } catch { }
             _tabs.Remove(tab);
             if (tabId == _activeTabId) SwitchToTab(_tabs[Math.Min(idx, _tabs.Count - 1)].Id);
+        }
+
+        /// <summary>Switch to tab by 0-based index (Ctrl+1..8). No-op if index &gt;= tab count.</summary>
+        private void SwitchToTabByIndex(int index)
+        {
+            if (index < 0 || index >= _tabs.Count) return;
+            SwitchToTab(_tabs[index].Id);
         }
 
         private BrowserTab? ActiveTab => _tabs.FirstOrDefault(t => t.Id == _activeTabId);
@@ -1274,9 +1301,9 @@ namespace PrivacyMonitor
                     tab.CurrentHost = uri.Host; tab.Url = e.Uri; tab.IsLoading = true;
                     if (!string.IsNullOrEmpty(tab.CurrentHost))
                     {
-                        var profile = ProtectionEngine.GetProfile(tab.CurrentHost);
+                        var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
                         profile.LastVisit = DateTime.UtcNow;
-                        ProtectionEngine.SetProfile(tab.CurrentHost, profile);
+                        ProtectionEngine.SetProfile(tab.CurrentHost, profile, GetProfileStore());
                     }
                     if (tab.Id == _activeTabId)
                     {
@@ -1298,7 +1325,7 @@ namespace PrivacyMonitor
             {
                 if (tab.IsReady)
                 {
-                    var profile = ProtectionEngine.GetProfile(tab.CurrentHost);
+                    var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
                     _ = UpdatePerNavigationScriptsAsync(tab, profile);
                 }
             }
@@ -1414,7 +1441,7 @@ namespace PrivacyMonitor
 
             try
             {
-                var profile = ProtectionEngine.GetProfile(tab.CurrentHost);
+                var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
                 await ApplyRuntimeBlockerAsync(tab, profile);
             }
             catch { }
@@ -1553,7 +1580,7 @@ namespace PrivacyMonitor
                     : 0;
 
                 // ── ACTIVE PROTECTION: Evaluate blocking decision ──
-                var profile = ProtectionEngine.GetProfile(tab.CurrentHost);
+                var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
                 var decision = ProtectionEngine.ShouldBlock(entry, tab.CurrentHost, profile);
 
                 // In Monitor mode only the browser cancels requests (e.g. navigation); we never block.
@@ -1614,13 +1641,16 @@ namespace PrivacyMonitor
                     s.SignalType == "cookie_sync" ||
                     s.SignalType == "data_exfil").ToList();
 
-                foreach (var sig in trackerSignals)
-                    if (!isMedia)
-                        ProtectionEngine.ObserveTrackerSignal(uri.Host, sig.SignalType, sig.Confidence);
+                // Adaptive learning: skip in private window so we don't persist
+                if (!_isPrivate)
+                {
+                    foreach (var sig in trackerSignals)
+                        if (!isMedia)
+                            ProtectionEngine.ObserveTrackerSignal(uri.Host, sig.SignalType, sig.Confidence);
 
-                // Cross-site learning: track third-party domain appearances
-                if (isThirdParty && trackerSignals.Count > 0 && !isMedia)
-                    ProtectionEngine.ObserveCrossSiteAppearance(uri.Host, tab.CurrentHost);
+                    if (isThirdParty && trackerSignals.Count > 0 && !isMedia)
+                        ProtectionEngine.ObserveCrossSiteAppearance(uri.Host, tab.CurrentHost);
+                }
 
                 // Enqueue for batched drain (avoids per-request Dispatcher.Invoke)
                 tab.PendingRequests.Enqueue(entry);
@@ -2510,7 +2540,7 @@ namespace PrivacyMonitor
         {
             var tab = ActiveTab;
             if (tab?.IsReady != true || string.IsNullOrEmpty(tab.CurrentHost)) { if (StatusText != null) StatusText.Text = "Open a site first."; return; }
-            ProtectionEngine.SetMode(tab.CurrentHost, ProtectionMode.Monitor);
+            ProtectionEngine.SetMode(tab.CurrentHost, ProtectionMode.Monitor, GetProfileStore());
             SetProtectionMenuChecked(ProtectionMode.Monitor);
             if (StatusText != null) StatusText.Text = $"Stopped blocking on {tab.CurrentHost}. Reload the page to apply.";
         }
@@ -2679,6 +2709,14 @@ namespace PrivacyMonitor
                             int next = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? (idx - 1 + _tabs.Count) % _tabs.Count : (idx + 1) % _tabs.Count;
                             SwitchToTab(_tabs[next].Id); }
                         e.Handled = true; break;
+                    case Key.D1: case Key.NumPad1: SwitchToTabByIndex(0); e.Handled = true; break;
+                    case Key.D2: case Key.NumPad2: SwitchToTabByIndex(1); e.Handled = true; break;
+                    case Key.D3: case Key.NumPad3: SwitchToTabByIndex(2); e.Handled = true; break;
+                    case Key.D4: case Key.NumPad4: SwitchToTabByIndex(3); e.Handled = true; break;
+                    case Key.D5: case Key.NumPad5: SwitchToTabByIndex(4); e.Handled = true; break;
+                    case Key.D6: case Key.NumPad6: SwitchToTabByIndex(5); e.Handled = true; break;
+                    case Key.D7: case Key.NumPad7: SwitchToTabByIndex(6); e.Handled = true; break;
+                    case Key.D8: case Key.NumPad8: SwitchToTabByIndex(7); e.Handled = true; break;
                 }
             }
             if (e.Key == Key.Enter && AddressBar != null && AddressBar.IsFocused)

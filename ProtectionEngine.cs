@@ -40,18 +40,30 @@ namespace PrivacyMonitor
 
         public static SiteProfile GetProfile(string host)
         {
+            return GetProfile(host, null);
+        }
+
+        /// <param name="ephemeral">When non-null (private window), use this store and never persist.</param>
+        public static SiteProfile GetProfile(string host, ConcurrentDictionary<string, SiteProfile>? ephemeral)
+        {
             if (string.IsNullOrEmpty(host)) return new SiteProfile { Mode = GlobalDefaultMode };
-            // Check exact host, then parent domain
-            if (_profiles.TryGetValue(host, out var p)) return p;
+            var store = ephemeral ?? _profiles;
+            if (store.TryGetValue(host, out var p)) return p;
             string parent = GetParentDomain(host);
-            if (!string.IsNullOrEmpty(parent) && _profiles.TryGetValue(parent, out var pp)) return pp;
+            if (!string.IsNullOrEmpty(parent) && store.TryGetValue(parent, out var pp)) return pp;
             return new SiteProfile { Mode = GlobalDefaultMode };
         }
 
         public static void SetProfile(string host, SiteProfile profile)
         {
-            _profiles[host] = profile;
-            SaveProfiles();
+            SetProfile(host, profile, null);
+        }
+
+        public static void SetProfile(string host, SiteProfile profile, ConcurrentDictionary<string, SiteProfile>? ephemeral)
+        {
+            var store = ephemeral ?? _profiles;
+            store[host] = profile;
+            if (ephemeral == null) SaveProfiles();
         }
 
         public static ProtectionMode GetEffectiveMode(string host)
@@ -59,12 +71,41 @@ namespace PrivacyMonitor
             return GetProfile(host).Mode;
         }
 
+        public static ProtectionMode GetEffectiveMode(string host, ConcurrentDictionary<string, SiteProfile>? ephemeral)
+        {
+            return GetProfile(host, ephemeral).Mode;
+        }
+
         public static void SetMode(string host, ProtectionMode mode)
         {
-            var p = GetProfile(host);
+            SetMode(host, mode, null);
+        }
+
+        public static void SetMode(string host, ProtectionMode mode, ConcurrentDictionary<string, SiteProfile>? ephemeral)
+        {
+            var p = GetProfile(host, ephemeral);
             p.Mode = mode;
-            _profiles[host] = p;
-            SaveProfiles();
+            var store = ephemeral ?? _profiles;
+            store[host] = p;
+            if (ephemeral == null) SaveProfiles();
+        }
+
+        /// <summary>
+        /// Notify the global tracker intelligence system that a likely tracker was seen on this page.
+        /// This is lightweight and safe to call from hot blocking paths.
+        /// </summary>
+        private static void ObserveTrackerAppearance(string trackerHost, string pageHost)
+        {
+            if (string.IsNullOrWhiteSpace(trackerHost) || string.IsNullOrWhiteSpace(pageHost))
+                return;
+            try
+            {
+                TrackerIntelligence.RecordObservation(trackerHost, pageHost);
+            }
+            catch
+            {
+                // Never let analytics impact blocking decisions.
+            }
         }
 
         // ════════════════════════════════════════════
@@ -98,6 +139,7 @@ namespace PrivacyMonitor
             // 1) Static blocklist layer
             if (blockAdsTrackers && TryGetBlocklistEntry(entry.Host, out var bl))
             {
+                ObserveTrackerAppearance(entry.Host, pageHost);
                 return new BlockDecision
                 {
                     Blocked = true,
@@ -111,6 +153,7 @@ namespace PrivacyMonitor
             // 2) Learned trackers
             if (blockAdsTrackers && IsLearnedTracker(entry.Host))
             {
+                ObserveTrackerAppearance(entry.Host, pageHost);
                 if (isMedia)
                     return new BlockDecision { Blocked = false, Reason = "Media request" };
                 return new BlockDecision
@@ -127,8 +170,9 @@ namespace PrivacyMonitor
             double trackerConfidence = MaxSignalConfidence(entry.Signals, "known_tracker", "heuristic_tracker");
             if (blockAdsTrackers && !string.IsNullOrEmpty(entry.TrackerLabel))
             {
-                if (mode == ProtectionMode.BlockKnown && trackerConfidence >= 0.40)
+                if (mode == ProtectionMode.BlockKnown && trackerConfidence >= 0.35)
                 {
+                    ObserveTrackerAppearance(entry.Host, pageHost);
                     return new BlockDecision
                     {
                         Blocked = true,
@@ -139,8 +183,9 @@ namespace PrivacyMonitor
                     };
                 }
 
-                if (mode == ProtectionMode.Aggressive && trackerConfidence >= 0.25)
+                if (mode == ProtectionMode.Aggressive && trackerConfidence >= 0.22)
                 {
+                    ObserveTrackerAppearance(entry.Host, pageHost);
                     return new BlockDecision
                     {
                         Blocked = true,
@@ -159,7 +204,7 @@ namespace PrivacyMonitor
                     s.SignalType == "js_injection" ||
                     s.SignalType == "session_replay" ||
                     s.SignalType == "behavioral_tracking");
-                if (behavioral != null && behavioral.Confidence >= 0.70)
+                if (behavioral != null && behavioral.Confidence >= 0.65)
                 {
                     return new BlockDecision
                     {
@@ -188,8 +233,9 @@ namespace PrivacyMonitor
                     .OrderByDescending(s => s.Confidence)
                     .FirstOrDefault();
 
-                if (heuristic != null && heuristic.Confidence >= 0.38)
+                if (heuristic != null && heuristic.Confidence >= 0.34)
                 {
+                    ObserveTrackerAppearance(entry.Host, pageHost);
                     return new BlockDecision
                     {
                         Blocked = true,
@@ -206,6 +252,7 @@ namespace PrivacyMonitor
             {
                 if (mode == ProtectionMode.Aggressive)
                 {
+                    ObserveTrackerAppearance(entry.Host, pageHost);
                     return new BlockDecision
                     {
                         Blocked = true,
@@ -217,6 +264,7 @@ namespace PrivacyMonitor
                 }
                 if (mode == ProtectionMode.BlockKnown && IsStrongAdLikeDomain(entry.Host))
                 {
+                    ObserveTrackerAppearance(entry.Host, pageHost);
                     return new BlockDecision
                     {
                         Blocked = true,
@@ -426,8 +474,10 @@ namespace PrivacyMonitor
             catch { }
         }
 
-        private static List<BlocklistEntry> GetDefaultBlocklistEntries() => new()
+        private static List<BlocklistEntry> GetDefaultBlocklistEntries()
         {
+            var list = new List<BlocklistEntry>
+            {
             // Google / Alphabet
             new BlocklistEntry { Domain = "doubleclick.net", Label = "Google DoubleClick", Category = "Ad" },
             new BlocklistEntry { Domain = "googlesyndication.com", Label = "Google AdSense", Category = "Ad" },
@@ -666,7 +716,34 @@ namespace PrivacyMonitor
             new BlocklistEntry { Domain = "tawk.to", Label = "Tawk.to", Category = "Tracking" },
             new BlocklistEntry { Domain = "fls-na.amazon.com", Label = "Amazon Tracking", Category = "Tracking" },
             new BlocklistEntry { Domain = "assoc-amazon.com", Label = "Amazon Associates", Category = "Ad" },
-        };
+            };
+
+            // Enrich blocklist with all structured tracker domains from PrivacyEngine (global tracker DB).
+            try
+            {
+                foreach (var t in PrivacyEngine.GetTrackerDatabase())
+                {
+                    if (string.IsNullOrWhiteSpace(t.Domain)) continue;
+                    string domain = t.Domain.Trim().ToLowerInvariant();
+                    if (list.Any(e => e.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+
+                    list.Add(new BlocklistEntry
+                    {
+                        Domain = domain,
+                        Label = string.IsNullOrWhiteSpace(t.Label) ? domain : t.Label,
+                        Category = t.Category == TrackerCategory.Advertising ? "Ad" : "Tracking",
+                        Confidence = 0.97
+                    });
+                }
+            }
+            catch
+            {
+                // If anything goes wrong, we still have the built-in list.
+            }
+
+            return list;
+        }
 
         // ════════════════════════════════════════════
         //  ANTI-FINGERPRINTING (BLEND-IN)
@@ -772,6 +849,9 @@ namespace PrivacyMonitor
         var _getExt = wgl.getExtension;
         var _readPixels = wgl.readPixels;
         wgl.getParameter = function(p) {
+            // Normalize vendor/renderer so many users share the same WebGL identity.
+            if (p === 0x1F00 || p === 0x9245) return 'Google Inc.'; // VENDOR / UNMASKED_VENDOR_WEBGL
+            if (p === 0x1F01 || p === 0x9246) return 'ANGLE (Intel(R) HD Graphics 620 Direct3D11 vs_5_0 ps_5_0)'; // RENDERER / UNMASKED_RENDERER_WEBGL
             if (A.webgl && A.webgl.params) {
                 var hex = '0x' + (p >>> 0).toString(16).toUpperCase();
                 if (A.webgl.params[hex] !== undefined) return A.webgl.params[hex];
@@ -802,6 +882,8 @@ namespace PrivacyMonitor
             var wgl2 = WebGL2RenderingContext.prototype;
             var _getParam2 = wgl2.getParameter;
             wgl2.getParameter = function(p) {
+                if (p === 0x1F00 || p === 0x9245) return 'Google Inc.';
+                if (p === 0x1F01 || p === 0x9246) return 'ANGLE (Intel(R) HD Graphics 620 Direct3D11 vs_5_0 ps_5_0)';
                 if (A.webgl && A.webgl.params) {
                     var hex = '0x' + (p >>> 0).toString(16).toUpperCase();
                     if (A.webgl.params[hex] !== undefined) return A.webgl.params[hex];
@@ -1268,7 +1350,7 @@ namespace PrivacyMonitor
             "/moat", "/doubleverify", "/adsafe", "/viewability",
             "/gtm-", "/fbevents", "/bat.js", "/smartsync", "/sync.", "/id/", "/idsync", "/matchid", "/user-match",
             "/pagead/", "/ads?", "/ad?", "/view.", "/imp?", "/impression", "/click?", "/conv?", "/conversion",
-            "/delivery/", "/sync?", "/match?", "/bid?", "/prebid", "/hb_pb", "/hb_bidder", "/gdpr", "/consent",
+            "/delivery/", "/sync?", "/match?", "/bid?", "/prebid", "/hb_pb", "/hb_bidder", "/hb_cv", "/hb_bidder", "/gdpr", "/consent",
             "/vast", "/vpaid", "/video-ad", "/ad.js", "/ads.js", "/adscript", "/adsystem", "/getuid",
             "/rta", "/rtb", "/prebid.", "/adsrvr", "/pxl.", "/px/", "/trk.", "/tracker.", "/pixel.", "/beacon.",
             "/collect?", "/event?", "/log?", "/stats?", "/metric", "/telemetry", "/__utm", "/utm_",
@@ -1277,7 +1359,9 @@ namespace PrivacyMonitor
             "/b/collect", "/s/collect", "/r/collect", "/__imp", "/__n", "/pagead/", "/pagead2/",
             "/ads?", "/adview", "/adrequest", "/adcall", "/adsystem", "/adserver", "/delivery",
             "/tr?", "/pixel?", "/beacon?", "/1x1", "/blank.gif", "/transparent.gif", "/pixel.gif",
-            "/gtm-", "/gtag/js", "/fbevents.js", "/ga.js", "/ua-", "/gid/", "/gtm.js"
+            "/gtm-", "/gtag/js", "/fbevents.js", "/ga.js", "/ua-", "/gid/", "/gtm.js",
+            "/v2/collect", "/v2/e", "/ingest", "/e/", "/i.ve", "/identity", "/sync/identity", "/gdpr_consent", "/__n", "/__imp",
+            "/hb_", "/setuid", "/usersync", "/match/id", "/id/sync", "/cm/sync", "/csync", "/ups"
         };
 
         private static bool IsAdOrTrackerPath(string pathOrUrl)
@@ -1304,7 +1388,9 @@ namespace PrivacyMonitor
             "adsrvr", "mathtag", "rfihub", "rubicon", "openx", "casalemedia", "indexexchange", "bidswitch",
             "adsymptotic", "moatads", "doubleverify", "adsafe", "flashtalking", "serving-sys", "amazon-adsystem",
             "app-measurement", "firebase", "gtag", "gtm.", "googletag", "fbevents", "facebook.com/tr", "bat.bing",
-            "clarity.ms", "hotjar", "fullstory", "mouseflow", "segment.", "mixpanel", "amplitude", "heapanalytics"
+            "clarity.ms", "hotjar", "fullstory", "mouseflow", "segment.", "mixpanel", "amplitude", "heapanalytics",
+            "smartadserver", "improvedigital", "synacor", "undertone", "teads", "spotx",
+            "liveramp", "pippio", "tapad", "lotame", "eyeota", "zeotap", "audiencescience", "omnicom"
         };
 
         /// <summary>High-confidence ad/tracker domain patterns — blocked even in BlockKnown mode.</summary>
@@ -1315,7 +1401,9 @@ namespace PrivacyMonitor
             "pixel.facebook", "facebook.net", "an.facebook", "bat.bing", "clarity.ms",
             "demdex", "bluekai", "krxd", "rlcdn", "lotame", "crwdcntrl", "tapad", "agkn",
             "scorecardresearch", "quantserve", "hotjar", "fullstory", "mouseflow", "smartlook", "logrocket",
-            "segment.io", "segment.com", "mixpanel", "amplitude", "heapanalytics", "googletagmanager", "gtm"
+            "segment.io", "segment.com", "mixpanel", "amplitude", "heapanalytics", "googletagmanager", "gtm",
+            "liveramp", "pippio", "eyeota", "zeotap", "improvedigital", "smartadserver", "adsymptotic",
+            "tiktok.com/i18n", "ads.tiktok", "analytics.tiktok", "tr.snapchat", "ads.linkedin", "snap.licdn"
         };
 
         private static bool IsStrongAdLikeDomain(string host)

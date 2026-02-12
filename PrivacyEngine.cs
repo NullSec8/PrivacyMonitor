@@ -288,6 +288,29 @@ namespace PrivacyMonitor
                 ("cdn.braze.com",          "Braze CDN",                 "Braze",       TrackerCategory.Analytics,  4),
                 ("clevertap.com",          "CleverTap",                 "CleverTap",   TrackerCategory.Analytics,  4),
                 ("wizrocket.com",          "WizRocket",                 "CleverTap",   TrackerCategory.Analytics,  3),
+
+                // ── Additional DMPs / identity / regional ──
+                ("zeotap.com",             "Zeotap CDP",                "Zeotap",      TrackerCategory.DMP, 5),
+                ("zeotap.io",              "Zeotap",                    "Zeotap",      TrackerCategory.DMP, 5),
+                ("improvedigital.com",     "Improve Digital",          "Improve",     TrackerCategory.Advertising, 4),
+                ("liveramp.com",           "LiveRamp",                  "LiveRamp",    TrackerCategory.DMP, 5),
+                ("synacor.com",            "Synacor",                   "Synacor",     TrackerCategory.Advertising, 3),
+                ("audiencescience.com",    "AudienceScience",          "AudienceScience", TrackerCategory.DMP, 5),
+                ("omnicomgroup.com",       "Omnicom",                   "Omnicom",     TrackerCategory.Advertising, 3),
+
+                // ── More CMPs / consent ──
+                ("sourcepoint.com",        "Sourcepoint CMP",           "Sourcepoint", TrackerCategory.CMP, 2),
+                ("didomi.io",              "Didomi CMP",                "Didomi",      TrackerCategory.CMP, 2),
+                ("quantcast.com",          "Quantcast Choice",          "Quantcast",   TrackerCategory.CMP, 3),
+                ("iab.eu",                 "IAB Europe TCF",           "IAB",         TrackerCategory.CMP, 1),
+
+                // ── More analytics / CDP ──
+                ("rudderstack.com",       "RudderStack",               "RudderStack", TrackerCategory.Analytics, 4),
+                ("rs.rudderstack.com",     "RudderStack",               "RudderStack", TrackerCategory.Analytics, 4),
+                ("posthog.com",            "PostHog",                   "PostHog",     TrackerCategory.Analytics, 3),
+                ("us.posthog.com",         "PostHog",                   "PostHog",     TrackerCategory.Analytics, 3),
+                ("launchdarkly.com",       "LaunchDarkly",              "LaunchDarkly", TrackerCategory.Analytics, 2),
+                ("cdn.launchdarkly.com",   "LaunchDarkly CDN",          "LaunchDarkly", TrackerCategory.Analytics, 2),
             };
 
             TrackerDatabase = raw.Select(r => new TrackerInfo
@@ -302,6 +325,12 @@ namespace PrivacyMonitor
                 TrackerLookup.TryAdd(t.Domain, t);
             TrackerDomainSuffixes = TrackerLookup.Keys.OrderBy(k => k).ToArray();
         }
+
+        /// <summary>
+        /// Expose the structured tracker database for other engines (e.g. ProtectionEngine blocklist seeding).
+        /// Read-only; do not mutate returned instances.
+        /// </summary>
+        public static IEnumerable<TrackerInfo> GetTrackerDatabase() => TrackerDatabase;
 
         private static string[] InferDataTypes(TrackerCategory cat) => cat switch
         {
@@ -335,7 +364,11 @@ namespace PrivacyMonitor
             "_ref", "source", "medium", "content", "term", "campaign_id", "ad_id", "placement",
             "adset", "ad_id", "fb_action_ids", "fb_source", "sc_cid", "mc_cid", "_hsq",
             "redirect_mid", "redirect_log_mid", "_bta_c", "_bta_t", "vero_conv", "_branch_match_id",
-            "tapad_id", "lr_id", "lr_enc", "om_campaign", "om_channel", "_gl", "gclsrc"
+            "tapad_id", "lr_id", "lr_enc", "om_campaign", "om_channel", "_gl", "gclsrc",
+            "__n", "__imp", "vgo_ee", "ns_", "ti_", "_pxl", "_px", "px_", "conv_", "click_id",
+            "rnd", "rand", "cache_bust", "cb_", "_reqid", "req_id", "request_id", "correlation",
+            "session_id", "visitor_id", "user_id", "device_id", "client_id", "customer_id",
+            "_hjid", "_hj", "intercom-id", "drift_", "hubspotutk", "__hs", "mp_", "s_vi", "s_fid"
         };
 
         // ════════════════════════════════════════════
@@ -701,10 +734,14 @@ namespace PrivacyMonitor
                 lower.Contains("/match?") || lower.Contains("/delivery") || lower.Contains("/pagead/") || lower.Contains("/pagead2/") ||
                 lower.Contains("/ad.js") || lower.Contains("/ads.js") || lower.Contains("/adrequest") || lower.Contains("/adcall") ||
                 lower.Contains("/vast") || lower.Contains("/vpaid") || lower.Contains("/hb_pb") || lower.Contains("/hb_bidder") ||
-                lower.Contains("/__n") || lower.Contains("/blank.gif") || lower.Contains("/transparent.gif"))
+                lower.Contains("/__n") || lower.Contains("/blank.gif") || lower.Contains("/transparent.gif") ||
+                lower.Contains("/v2/collect") || lower.Contains("/v2/e") || lower.Contains("/ingest") || lower.Contains("/e?") ||
+                lower.Contains("/i.ve") || lower.Contains("/identity") || lower.Contains("/sync/identity") || lower.Contains("/setuid") ||
+                lower.Contains("/usersync") || lower.Contains("/match/id") || lower.Contains("/id/sync") || lower.Contains("/gdpr_consent") ||
+                lower.Contains("/cm/sync") || lower.Contains("/csync") || lower.Contains("/ups") || lower.Contains("/__imp"))
             {
-                var heuristic = new TrackerInfo { Domain = host, Label = "Suspected Tracker (heuristic)", Company = "Unknown", Category = TrackerCategory.Other, RiskWeight = 2 };
-                return new TrackerMatch { Info = heuristic, MatchType = "heuristic", Confidence = 0.68 };
+                var heuristic = new TrackerInfo { Domain = host, Label = "Suspected Tracker (heuristic)", Company = "Unknown", Category = TrackerCategory.Other, RiskWeight = 3 };
+                return new TrackerMatch { Info = heuristic, MatchType = "heuristic", Confidence = 0.72 };
             }
             return null;
         }
@@ -799,7 +836,7 @@ namespace PrivacyMonitor
                     SignalType = "third_party_script",
                     Source = req.Host,
                     Detail = $"Third-party script loaded from {req.Host} — can track behavior and fingerprint",
-                    Confidence = 0.62,
+                    Confidence = 0.66,
                     Risk = RiskType.Tracking,
                     Severity = 2,
                     Evidence = $"Script from {req.Host}",

@@ -1,63 +1,25 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "build-release",
-			"type": "shell",
-			"command": "dotnet",
-			"args": [
-				"build",
-				"-c",
-				"Release"
-			],
-			"isBackground": false,
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"group": "build"
-		},
-		{
-			"label": "build-release",
-			"type": "shell",
-			"command": "dotnet",
-			"args": [
-				"build",
-				"-c",
-				"Release"
-			],
-			"isBackground": false,
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"group": "build"
-		},
-		{
-			"label": "run-release",
-			"type": "shell",
-			"command": "dotnet",
-			"args": [
-				"run",
-				"-c",
-				"Release"
-			],
-			"isBackground": true,
-			"problemMatcher": [],
-			"group": "build"
-		},
-		{
-			"label": "build-release",
-			"type": "shell",
-			"command": "dotnet",
-			"args": [
-				"build",
-				"-c",
-				"Release"
-			],
-			"isBackground": false,
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"group": "build"
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-release",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["build", "-c", "Release"],
+      "isBackground": false,
+      "problemMatcher": ["$msCompile"],
+      "group": "build"
+    },
+    {
+      "label": "run-release",
+      "type": "shell",
+      "command": "${workspaceFolder}/bin/Release/net9.0-windows/win-x64/PrivacyMonitor.exe",
+      "args": [],
+      "isBackground": true,
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true },
+      "dependsOn": "build-release",
+      "options": { "cwd": "${workspaceFolder}" }
+    }
+  ]
 }

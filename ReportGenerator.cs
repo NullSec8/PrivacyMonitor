@@ -136,6 +136,36 @@ namespace PrivacyMonitor
             }
             sb.Append("</table>");
 
+            // Credential safety + suspicious signals
+            var susp = SecurityHeuristics.AssessSuspicion(scan);
+            var cred = SecurityHeuristics.AssessCredentialSafety(scan);
+
+            string credColor = cred.Level switch
+            {
+                CredentialSafety.Safe => "var(--green)",
+                CredentialSafety.Caution => "var(--warn)",
+                _ => "var(--red)"
+            };
+
+            sb.Append($@"<h3>Credential Safety Hint</h3>
+<p style=""font-size:11px;""><strong style=""color:{credColor}"">{Esc(cred.Level.ToString())}</strong> &mdash; {Esc(cred.Explanation)}</p>");
+
+            if (susp.Reasons.Count > 0)
+            {
+                string suspColor = susp.Level switch
+                {
+                    SuspicionLevel.Low => "var(--muted)",
+                    SuspicionLevel.Medium => "var(--warn)",
+                    _ => "var(--red)"
+                };
+                sb.Append($@"<h3>Suspicious Signals</h3>
+<p style=""font-size:11px;color:{suspColor}"">Overall suspicion: {Esc(susp.Level.ToString())}</p>
+<ul style=""font-size:11px;color:#4B5563;margin-left:16px;margin-bottom:10px"">");
+                foreach (var r in susp.Reasons)
+                    sb.Append($@"<li>{Esc(r)}</li>");
+                sb.Append("</ul>");
+            }
+
             // Cookies
             if (scan.Cookies.Count > 0)
             {
@@ -171,6 +201,20 @@ namespace PrivacyMonitor
                 sb.Append(@"<h3>Top Trackers</h3><table><tr><th>Tracker</th><th>Requests</th><th>Sample Host</th></tr>");
                 foreach (var g in topTrackers)
                     sb.Append($@"<tr><td><strong>{Esc(g.Key)}</strong></td><td>{g.Count()}</td><td style=""font-size:10px"">{Esc(g.First().Host)}</td></tr>");
+                sb.Append("</table>");
+            }
+
+            // Script inventory (for analyst / educational use)
+            var scripts = ScriptCatalog.Build(scan);
+            if (scripts.Count > 0)
+            {
+                sb.Append(@"<h3>Script &amp; Source Inventory</h3><table><tr><th>Host</th><th>Path</th><th>Scope</th><th>Tracker</th></tr>");
+                foreach (var s in scripts)
+                {
+                    string scope = s.IsThirdParty ? "<span class='tag tag-3rd'>3rd-party</span>" : "<span class='tag tag-1st'>This site</span>";
+                    string tracker = s.IsTracker ? $"<span class='tag tag-tracker'>{Esc(s.TrackerLabel)}</span>" : "";
+                    sb.Append($@"<tr><td>{Esc(s.Host)}</td><td style=""font-size:10px"">{Esc(s.Path)}</td><td>{scope}</td><td>{tracker}</td></tr>");
+                }
                 sb.Append("</table>");
             }
 
@@ -225,6 +269,18 @@ namespace PrivacyMonitor
                 sb.Append(@"<h3>Score Justification (Regulatory-Defensible)</h3><table><tr><th>Category</th><th>Penalty</th><th>GDPR</th><th>Justification</th></tr>");
                 foreach (var ex in explanations)
                     sb.Append($@"<tr><td><strong>{Esc(ex.Category)}</strong></td><td class=""sev-high"">{ex.Penalty}</td><td>{Esc(ex.GdprRelevance)}</td><td class=""gdpr-desc"">{Esc(ex.Justification)}</td></tr>");
+                sb.Append("</table>");
+            }
+
+            // Educational lessons
+            var lessons = LessonEngine.BuildLessons(scan);
+            if (lessons.Count > 0)
+            {
+                sb.Append(@"<h3>Guided Lessons for This Site</h3><table><tr><th>Topic</th><th>What it is</th><th>Why it matters</th><th>Where to look</th></tr>");
+                foreach (var l in lessons)
+                {
+                    sb.Append($@"<tr><td><strong>{Esc(l.Title)}</strong></td><td class=""gdpr-desc"">{Esc(l.What)}</td><td class=""gdpr-desc"">{Esc(l.WhyItMatters)}</td><td style=""font-size:10px"">{Esc(l.WhereToLook)}</td></tr>");
+                }
                 sb.Append("</table>");
             }
 

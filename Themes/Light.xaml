@@ -42,4 +42,17 @@
     <SolidColorBrush x:Key="MenuPopupBackground" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="MenuItemHoverBrush" Color="#E8ECF0"/>
     <SolidColorBrush x:Key="MenuSeparatorBrush" Color="#E2E8F0"/>
+    <!-- Semantic colors (theme-aware) -->
+    <SolidColorBrush x:Key="AccentLinkBrush" Color="#0891B2"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#15803D"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#C2410C"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="#B91C1C"/>
+    <SolidColorBrush x:Key="DangerButtonBackground" Color="#FEE2E2"/>
+    <SolidColorBrush x:Key="DangerButtonForeground" Color="#B91C1C"/>
+    <SolidColorBrush x:Key="HighRiskWarningBackground" Color="#3D1F1F"/>
+    <SolidColorBrush x:Key="HighRiskWarningBorder" Color="#A50E0E"/>
+    <SolidColorBrush x:Key="HighRiskWarningText" Color="#FEE2E2"/>
+    <SolidColorBrush x:Key="CrashOverlayBackground" Color="#F0F2F5"/>
+    <SolidColorBrush x:Key="CrashOverlayTitle" Color="#202124"/>
+    <SolidColorBrush x:Key="CrashOverlaySubtitle" Color="#5F6368"/>
 </ResourceDictionary>

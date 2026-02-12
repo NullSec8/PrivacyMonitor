@@ -29,15 +29,15 @@
 
         <!-- Analysis tab pill -->
         <Style x:Key="APill" TargetType="Button">
-            <Setter Property="Height" Value="30"/><Setter Property="Padding" Value="14,0"/>
-            <Setter Property="FontSize" Value="11"/><Setter Property="FontWeight" Value="Medium"/><Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="#475569"/>
-            <Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Height" Value="32"/><Setter Property="Padding" Value="16,0"/>
+            <Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="Medium"/><Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+            <Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Margin" Value="0,0,6,0"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="15" Padding="{TemplateBinding Padding}">
+                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="16" Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#F1F5F9"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource ChromeButtonHoverBrush}"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
@@ -61,13 +61,13 @@
         <Style x:Key="SecBtn" TargetType="Button">
             <Setter Property="Height" Value="30"/><Setter Property="Padding" Value="14,0"/>
             <Setter Property="FontSize" Value="11"/><Setter Property="FontWeight" Value="Medium"/><Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="Background" Value="#F1F3F4"/><Setter Property="Foreground" Value="#3C4043"/>
+            <Setter Property="Background" Value="{DynamicResource ChipBackground}"/><Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
             <Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
                 <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="15" Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="#E8EAED"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource ChromeButtonHoverBrush}"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
@@ -101,21 +101,69 @@
             <Setter Property="Background" Value="{DynamicResource ChipBackground}"/>
         </Style>
 
-        <!-- App menu: theme-aware, cleaner look -->
+        <!-- App menu: theme-aware, no white strip (full template so popup root is dark) -->
         <Style TargetType="ContextMenu">
             <Setter Property="Background" Value="{DynamicResource MenuPopupBackground}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="6,6"/>
+            <Setter Property="Padding" Value="0,6"/>
             <Setter Property="FontFamily" Value="Segoe UI"/>
             <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style TargetType="MenuItem">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
-            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="Padding" Value="0,10"/>
             <Setter Property="FontFamily" Value="Segoe UI"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="0,0,8,0" VerticalAlignment="Stretch" MinHeight="36">
+                            <Grid VerticalAlignment="Stretch">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="22" MinWidth="22"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="20" MinWidth="20"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- Left: check/glyph area -->
+                                <Border x:Name="GlyphArea" Grid.Column="0" Background="{DynamicResource MenuPopupBackground}" VerticalAlignment="Stretch" Margin="0" SnapsToDevicePixels="True">
+                                    <TextBlock x:Name="CheckMark" Text="&#x2713;" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource AccentLinkBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                </Border>
+                                <ContentPresenter x:Name="HeaderHost" Grid.Column="1" ContentSource="Header" ContentTemplate="{TemplateBinding HeaderTemplate}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <!-- Submenu arrow when item has children -->
+                                <TextBlock x:Name="SubmenuArrow" Grid.Column="2" Text="&#x25B6;" FontSize="10" Foreground="{DynamicResource TextMuted}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsSubmenuOpen}" Placement="Right" AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
+                                    <Border Background="{DynamicResource MenuPopupBackground}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" Padding="4,2">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource MenuItemHoverBrush}"/>
+                                <Setter TargetName="GlyphArea" Property="Background" Value="{DynamicResource MenuItemHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="True">
+                                <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <Style.Triggers>
                 <Trigger Property="IsHighlighted" Value="True">
                     <Setter Property="Background" Value="{DynamicResource MenuItemHoverBrush}"/>
@@ -124,7 +172,7 @@
         </Style>
         <Style TargetType="Separator">
             <Setter Property="Background" Value="{DynamicResource MenuSeparatorBrush}"/>
-            <Setter Property="Margin" Value="8,5"/>
+            <Setter Property="Margin" Value="12,6"/>
             <Setter Property="Height" Value="1"/>
         </Style>
 
@@ -187,7 +235,7 @@
         </Border>
 
         <!-- NAV BAR -->
-        <Border DockPanel.Dock="Top" Background="{DynamicResource NavBarBackground}" Padding="14,12,14,12" BorderBrush="{DynamicResource NavBarBorderBrush}" BorderThickness="0,0,0,1">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource NavBarBackground}" Padding="16,14,16,14" BorderBrush="{DynamicResource NavBarBorderBrush}" BorderThickness="0,0,0,1">
             <DockPanel>
                 <!-- Nav buttons -->
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0">
@@ -266,13 +314,13 @@
                     <!-- Anti-Fingerprint Toggle -->
                     <Button x:Name="AntiFpBtn" Style="{StaticResource CNav}" Width="28" Height="28"
                             Content="FP" FontSize="9" FontWeight="Bold" Click="ToggleAntiFp_Click"
-                            ToolTip="Anti-fingerprinting protection" Foreground="#188038" Margin="0,0,4,0"/>
+                            ToolTip="Anti-fingerprinting protection" Foreground="{DynamicResource SuccessBrush}" Margin="0,0,4,0"/>
                         <!-- Ad/Tracker Blocking Toggle -->
                         <Button x:Name="AdBlockBtn" Style="{StaticResource CNav}" Width="28" Height="28"
                             Content="AD" FontSize="9" FontWeight="Bold" Click="ToggleAdBlock_Click"
-                            ToolTip="Ad/Tracker blocking" Foreground="#D93025" Margin="0,0,4,0"/>
+                            ToolTip="Ad/Tracker blocking" Foreground="{DynamicResource DangerBrush}" Margin="0,0,4,0"/>
                     <!-- Blocked Count Badge -->
-                    <Border x:Name="BlockedBadge" CornerRadius="10" Background="#D93025" MinWidth="22" Height="20"
+                    <Border x:Name="BlockedBadge" CornerRadius="10" Background="{DynamicResource DangerBrush}" MinWidth="22" Height="20"
                             VerticalAlignment="Center" Margin="0,0,4,0" Padding="4,0" Visibility="Collapsed">
                         <TextBlock x:Name="BlockedCountText" Text="0" FontSize="9" FontWeight="Bold" Foreground="White"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe UI"/>
@@ -306,8 +354,8 @@
                         </Grid>
                     </Border>
                     <!-- Address suggestions (visual scaffold) -->
-                    <Border x:Name="AddressSuggestions" Visibility="Collapsed" CornerRadius="14" Background="White" Padding="10" Margin="10,4,10,0"
-                            BorderBrush="#E5E7EB" BorderThickness="1">
+                    <Border x:Name="AddressSuggestions" Visibility="Collapsed" CornerRadius="14" Background="{DynamicResource CardBackground}" Padding="10" Margin="10,4,10,0"
+                            BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
                         <StackPanel>
                             <TextBlock Text="Suggestions" FontSize="9" Foreground="#9AA0A6" FontFamily="Segoe UI"/>
                             <TextBlock Text="example.com    Grade A" FontSize="11" Foreground="#202124" FontFamily="Segoe UI"/>
@@ -323,11 +371,11 @@
                      Foreground="{DynamicResource LoadingBarForeground}" IsIndeterminate="True" Visibility="Collapsed"/>
 
         <!-- STATUS BAR -->
-        <Border DockPanel.Dock="Bottom" Background="{DynamicResource StatusBarBackground}" Padding="18,10" BorderBrush="{DynamicResource StatusBarBorderBrush}" BorderThickness="0,1,0,0">
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource StatusBarBackground}" Padding="20,12" BorderBrush="{DynamicResource StatusBarBorderBrush}" BorderThickness="0,1,0,0">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Left" x:Name="StatusText" Text="Ready — enter a URL above to start" Foreground="{DynamicResource TextMuted}" FontSize="12" FontFamily="Segoe UI" VerticalAlignment="Center"/>
                 <TextBlock DockPanel.Dock="Right" x:Name="RequestCountText" Text="" Foreground="{DynamicResource TextMuted}" FontSize="11" FontFamily="Segoe UI" VerticalAlignment="Center"/>
-                <TextBlock DockPanel.Dock="Right" x:Name="ProtectionStatusText" Text="" Foreground="#0D9488" FontSize="12" FontWeight="SemiBold" FontFamily="Segoe UI" Margin="0,0,16,0" VerticalAlignment="Center"/>
+                <TextBlock DockPanel.Dock="Right" x:Name="ProtectionStatusText" Text="" Foreground="{DynamicResource AccentLinkBrush}" FontSize="12" FontWeight="SemiBold" FontFamily="Segoe UI" Margin="0,0,16,0" VerticalAlignment="Center"/>
                 <TextBlock/>
             </DockPanel>
         </Border>
@@ -343,21 +391,21 @@
             <Grid Grid.Column="0">
                 <Grid x:Name="WebViewContainer" Background="{DynamicResource ContentBackground}"/>
                 <Popup x:Name="BookmarksPopup" Placement="Bottom" StaysOpen="False">
-                    <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="0" MinWidth="280" MaxHeight="400">
+                    <Border Background="{DynamicResource MenuPopupBackground}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="0" MinWidth="280" MaxHeight="400">
                         <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.15" Color="Black"/></Border.Effect>
                         <StackPanel>
-                            <TextBlock Text="Bookmarks" FontSize="12" FontWeight="SemiBold" Foreground="#202124" Margin="12,10,12,6" FontFamily="Segoe UI"/>
+                            <TextBlock Text="Bookmarks" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" Margin="14,12,14,8" FontFamily="Segoe UI"/>
                             <ListBox x:Name="BookmarksListBox" BorderThickness="0" Background="Transparent" MaxHeight="320"
                                      SelectionChanged="BookmarksList_SelectionChanged" FontSize="11" FontFamily="Segoe UI" DisplayMemberPath="Display"/>
                         </StackPanel>
                     </Border>
                 </Popup>
-                <Border x:Name="CrashOverlay" Visibility="Collapsed" Background="#F0F2F5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                <Border x:Name="CrashOverlay" Visibility="Collapsed" Background="{DynamicResource CrashOverlayBackground}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
-                        <TextBlock Text="This page crashed." FontSize="18" FontWeight="SemiBold" Foreground="#202124" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
-                        <TextBlock Text="The tab may have run out of memory or hit a bug." FontSize="12" Foreground="#5F6368" HorizontalAlignment="Center" Margin="0,8,0,16" FontFamily="Segoe UI"/>
+                        <TextBlock Text="This page crashed." FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource CrashOverlayTitle}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
+                        <TextBlock Text="The tab may have run out of memory or hit a bug." FontSize="12" Foreground="{DynamicResource CrashOverlaySubtitle}" HorizontalAlignment="Center" Margin="0,8,0,16" FontFamily="Segoe UI"/>
                         <Button x:Name="CrashReloadBtn" Content="Reload" Click="CrashReload_Click" Width="120" Height="36" FontSize="13" FontFamily="Segoe UI"
-                                Background="#0891B2" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+                                Background="{DynamicResource AccentLinkBrush}" Foreground="White" BorderThickness="0" Cursor="Hand"/>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -370,7 +418,7 @@
                 <DockPanel>
 
                     <!-- Sidebar header -->
-                    <Border DockPanel.Dock="Top" Background="{DynamicResource SidebarHeaderBackground}" Padding="20,16" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="0,0,0,1">
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource SidebarHeaderBackground}" Padding="22,18" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="0,0,0,1">
                         <DockPanel>
                             <Button DockPanel.Dock="Right" Style="{StaticResource CNav}" Width="30" Height="30"
                                     Content="&#x2715;" FontSize="12" Click="ToggleSidebar_Click" ToolTip="Close panel"/>
@@ -428,8 +476,8 @@
                     </Border>
 
                     <!-- High-risk warning (shown when grade F or very low score) -->
-                    <Border x:Name="HighRiskWarningBorder" DockPanel.Dock="Top" Visibility="Collapsed" Background="#3D1F1F" Padding="14,10" Margin="12,0,12,8" CornerRadius="10" BorderBrush="#A50E0E" BorderThickness="1">
-                        <TextBlock x:Name="HighRiskWarningText" Text="High risk – consider leaving this site or avoid entering sensitive data." FontSize="12" Foreground="#FEE2E2" TextWrapping="Wrap" FontFamily="Segoe UI"/>
+                    <Border x:Name="HighRiskWarningBorder" DockPanel.Dock="Top" Visibility="Collapsed" Background="{DynamicResource HighRiskWarningBackground}" Padding="16,12" Margin="12,0,12,8" CornerRadius="10" BorderBrush="{DynamicResource HighRiskWarningBorder}" BorderThickness="1">
+                        <TextBlock x:Name="HighRiskWarningText" Text="High risk – consider leaving this site or avoid entering sensitive data." FontSize="12" Foreground="{DynamicResource HighRiskWarningText}" TextWrapping="Wrap" FontFamily="Segoe UI"/>
                     </Border>
 
                     <!-- Simple: one line. Expert: full grid -->
@@ -443,23 +491,23 @@
                                 <TextBlock Text="Requests" FontSize="9" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Center" ToolTip="We blocked these from loading (ads or trackers you're protected from)">
-                                <TextBlock x:Name="StatBlocked" Text="0" FontSize="16" FontWeight="Bold" Foreground="#188038" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
+                                <TextBlock x:Name="StatBlocked" Text="0" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource SuccessBrush}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                                 <TextBlock Text="Blocked" FontSize="9" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Center" ToolTip="Connections to other companies' servers (normal for many sites)">
-                                <TextBlock x:Name="StatThirdParty" Text="0" FontSize="16" FontWeight="Bold" Foreground="#E37400" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
+                                <TextBlock x:Name="StatThirdParty" Text="0" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                                 <TextBlock Text="Other sites" FontSize="9" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Center" ToolTip="Known tracking or advertising services on this page">
-                                <TextBlock x:Name="StatTrackers" Text="0" FontSize="16" FontWeight="Bold" Foreground="#D93025" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
+                                <TextBlock x:Name="StatTrackers" Text="0" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                                 <TextBlock Text="Trackers" FontSize="9" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Center" ToolTip="Ways this page can recognize your device (e.g. canvas, fonts)">
-                                <TextBlock x:Name="StatFingerprints" Text="0" FontSize="16" FontWeight="Bold" Foreground="#A50E0E" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
+                                <TextBlock x:Name="StatFingerprints" Text="0" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                                 <TextBlock Text="Fingerprint" FontSize="9" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
                             <StackPanel HorizontalAlignment="Center" ToolTip="Cookies that may be used for tracking or ads">
-                                <TextBlock x:Name="StatCookies" Text="0" FontSize="16" FontWeight="Bold" Foreground="#E37400" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
+                                <TextBlock x:Name="StatCookies" Text="0" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                                 <TextBlock Text="Cookies" FontSize="9" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
                             </StackPanel>
                         </UniformGrid>
@@ -479,7 +527,7 @@
                     </Border>
 
                     <!-- PANEL CONTENT -->
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,12">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="18,14">
                         <Grid>
 
                             <!-- DASHBOARD -->
@@ -590,7 +638,7 @@
                                                 <Border.Effect><DropShadowEffect BlurRadius="6" ShadowDepth="1" Opacity="0.06" Color="Black"/></Border.Effect>
                                                 <StackPanel>
                                                     <DockPanel>
-                                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Article}" FontSize="11" FontWeight="Bold" Foreground="#0891B2" FontFamily="Segoe UI"/>
+                                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Article}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource AccentLinkBrush}" FontFamily="Segoe UI"/>
                                                         <TextBlock DockPanel.Dock="Right" Text="{Binding Count}" FontSize="10" Foreground="{DynamicResource TextMuted}" FontFamily="Segoe UI"/>
                                                         <TextBlock Text="{Binding Severity}" FontSize="10" FontWeight="Bold" Foreground="{Binding SeverityColor}" Margin="10,0,0,0" FontFamily="Segoe UI"/>
                                                     </DockPanel>
@@ -695,8 +743,8 @@
                             <StackPanel x:Name="Panel2" Visibility="Collapsed">
                                 <TextBlock Text="Cookies and web storage" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondary}" Margin="2,0,0,4" FontFamily="Segoe UI"/>
                                 <TextBlock x:Name="StorageSummaryText" Text="Visit a website to see cookies and storage." FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="2,0,0,8" FontFamily="Segoe UI"/>
-                                <Button x:Name="ClearSiteDataBtn" Content="Clear data for this site" Click="ClearSiteData_Click" Margin="2,0,0,8" Padding="10,6" FontSize="11" FontFamily="Segoe UI"
-                                        Background="#FEE2E2" Foreground="#B91C1C" BorderThickness="0" Cursor="Hand" ToolTip="Clear cookies, localStorage, and sessionStorage for the current site"/>
+                                <Button x:Name="ClearSiteDataBtn" Content="Clear data for this site" Click="ClearSiteData_Click" Margin="2,0,0,8" Padding="12,8" FontSize="11" FontFamily="Segoe UI"
+                                        Background="{DynamicResource DangerButtonBackground}" Foreground="{DynamicResource DangerButtonForeground}" BorderThickness="0" Cursor="Hand" ToolTip="Clear cookies, localStorage, and sessionStorage for the current site"/>
                                 <ListBox x:Name="StorageList" MaxHeight="500" BorderThickness="0" Background="Transparent">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
@@ -752,7 +800,7 @@
                                                 <Border.Effect><DropShadowEffect BlurRadius="6" ShadowDepth="1" Opacity="0.06" Color="Black"/></Border.Effect>
                                                 <StackPanel>
                                                     <DockPanel>
-                                                        <TextBlock Text="{Binding Type}" FontSize="11" FontWeight="Bold" Foreground="#A50E0E" FontFamily="Segoe UI"/>
+                                                        <TextBlock Text="{Binding Type}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" FontFamily="Segoe UI"/>
                                                         <TextBlock DockPanel.Dock="Right" Text="{Binding Time}" FontSize="9" Foreground="{DynamicResource TextMuted}" FontFamily="Segoe UI"/>
                                                     </DockPanel>
                                                     <TextBlock Text="{Binding Detail}" FontSize="10" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" FontFamily="Segoe UI"/>
