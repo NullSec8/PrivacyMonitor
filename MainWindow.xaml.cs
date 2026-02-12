@@ -47,6 +47,16 @@ namespace PrivacyMonitor
 
     public partial class MainWindow : Window
     {
+        private sealed class TaskManagerRow
+        {
+            public string Id { get; init; } = "";
+            public string Title { get; init; } = "";
+            public string Url { get; init; } = "";
+            public string Memory { get; init; } = "";
+            public string RequestsLabel { get; init; } = "";
+            public string BlockedLabel { get; init; } = "";
+            public string SleepLabel { get; init; } = "";
+        }
         private readonly List<BrowserTab> _tabs = new();
         private string _activeTabId = "";
         private int _activeAnalysisTab;
@@ -57,6 +67,9 @@ namespace PrivacyMonitor
         private bool _antiFpEnabled = true;
         private bool _adBlockEnabled = true;
         private readonly DispatcherTimer _uiTimer;
+        // Idle tab sleep (performance & resource control)
+        private readonly TimeSpan _idleBeforeSleep = TimeSpan.FromMinutes(15);
+        private DateTime _lastSleepCheckUtc = DateTime.UtcNow;
         private readonly SessionContext _session = new();
         private List<BookmarkEntry> _bookmarks = new();
         private AppSettings _settings = new();
@@ -310,7 +323,15 @@ namespace PrivacyMonitor
             };
 
             _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-            _uiTimer.Tick += (_, _) => { if (_dirty) { _dirty = false; RefreshAll(); } };
+            _uiTimer.Tick += (_, _) =>
+            {
+                if (_dirty)
+                {
+                    _dirty = false;
+                    RefreshAll();
+                }
+                CheckIdleTabsForSleep();
+            };
             _uiTimer.Start();
 
             Closing += MainWindow_Closing;
@@ -987,9 +1008,18 @@ namespace PrivacyMonitor
             {
                 bool active = t.Id == tabId;
                 t.WebView.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
-                StyleTabHeader(t, active);
+
                 if (active)
                 {
+                    // Wake sleeping tab when it becomes active
+                    if (t.IsSleeping && t.WebView != null)
+                    {
+                        ResumeWebView(t.WebView);
+                        t.IsSleeping = false;
+                    }
+
+                    t.LastActivityUtc = DateTime.UtcNow;
+
                     bool isWelcome = string.IsNullOrEmpty(t.Url) || t.Url.StartsWith("about:", StringComparison.OrdinalIgnoreCase);
                     AddressBar.Text = isWelcome ? "" : t.Url;
                     UpdateAddressBarPlaceholder();
@@ -1001,6 +1031,8 @@ namespace PrivacyMonitor
                     UpdateStarButton();
                     if (CrashOverlay != null) CrashOverlay.Visibility = t.IsCrashed ? Visibility.Visible : Visibility.Collapsed;
                 }
+
+                StyleTabHeader(t, active);
             }
             _dirty = true;
         }
@@ -1106,12 +1138,28 @@ namespace PrivacyMonitor
             tab.BlockedBadge = blockedBadge;
             tab.BlockedBadgeText = blockedText;
 
+            // Heavy tab indicator (small dot/flame for high resource usage)
+            var heavyBadge = new Border
+            {
+                Width = 8,
+                Height = 8,
+                CornerRadius = new CornerRadius(4),
+                Background = new SolidColorBrush(Color.FromRgb(249, 115, 22)), // warm orange
+                Margin = new Thickness(4, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Visibility = Visibility.Collapsed,
+                ToolTip = "This tab is using more resources than others."
+            };
+            tab.HeavyBadge = heavyBadge;
+
             // Layout
             var panel = new DockPanel();
             DockPanel.SetDock(closeBtn, Dock.Right);
             DockPanel.SetDock(blockedBadge, Dock.Right);
+            DockPanel.SetDock(heavyBadge, Dock.Right);
             panel.Children.Add(closeBtn);
             panel.Children.Add(blockedBadge);
+            panel.Children.Add(heavyBadge);
             panel.Children.Add(initialBorder);
             panel.Children.Add(title);
 
@@ -1126,6 +1174,13 @@ namespace PrivacyMonitor
                 MinWidth = 80, MaxWidth = 220,
                 ToolTip = "New Tab"
             };
+
+            // Delay tooltip like Chrome's hover cards (e.g., 2 seconds)
+            ToolTipService.SetInitialShowDelay(border, 2000);
+
+            // When user hovers a tab, request a fresh memory reading for that tab
+            border.MouseEnter += (_, _) => RequestTabMemoryAsync(tab);
+
             border.MouseLeftButtonDown += (_, _) => SwitchToTab(cid);
             return border;
         }
@@ -1136,6 +1191,7 @@ namespace PrivacyMonitor
             tab.TitleBlock.Foreground = active ? TabActiveFg : TabInactiveFg;
             if (tab.TabHeader.Child is DockPanel dp && dp.Children.Count > 0 && dp.Children[0] is Button cb)
                 cb.Foreground = active ? TabActiveFg : TabInactiveFg;
+
             // Active tab: subtle shadow and theme-aware border so it connects to nav bar
             if (active)
             {
@@ -1148,6 +1204,22 @@ namespace PrivacyMonitor
                 tab.TabHeader.Effect = null;
                 tab.TabHeader.BorderThickness = new Thickness(0);
                 tab.TabHeader.BorderBrush = null;
+            }
+
+            // Sleeping tabs: slightly dimmed so users can see they are paused
+            if (!active && tab.IsSleeping)
+            {
+                tab.TabHeader.Opacity = 0.6;
+            }
+            else
+            {
+                tab.TabHeader.Opacity = 1.0;
+            }
+
+            // Heavy-tab indicator visibility
+            if (tab.HeavyBadge != null)
+            {
+                tab.HeavyBadge.Visibility = tab.IsHeavy ? Visibility.Visible : Visibility.Collapsed;
             }
         }
 
@@ -1163,6 +1235,253 @@ namespace PrivacyMonitor
                 _ = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref value, size);
             }
             catch { }
+        }
+
+        // ================================================================
+        //  TAB SLEEP / WAKE (PERFORMANCE)
+        // ================================================================
+
+        /// <summary>Periodically called from the UI timer to suspend long-idle background tabs.</summary>
+        private async void CheckIdleTabsForSleep()
+        {
+            var now = DateTime.UtcNow;
+
+            // Throttle to avoid running every 500ms
+            if (now - _lastSleepCheckUtc < TimeSpan.FromSeconds(30))
+                return;
+
+            _lastSleepCheckUtc = now;
+
+            foreach (var tab in _tabs)
+            {
+                // Never sleep the active tab
+                if (tab.Id == _activeTabId)
+                    continue;
+                if (!tab.IsReady || tab.IsSleeping)
+                    continue;
+
+                // Skip very new tabs that haven't navigated yet
+                if (now - tab.LastActivityUtc < _idleBeforeSleep)
+                    continue;
+
+                if (tab.WebView == null || tab.WebView.CoreWebView2 == null)
+                    continue;
+
+                bool suspended = await TrySuspendWebViewAsync(tab.WebView);
+                if (!suspended)
+                    continue;
+
+                tab.IsSleeping = true;
+
+                // Light UI hint so users know the tab is paused
+                Dispatcher.Invoke(() =>
+                {
+                    tab.TabHeader.ToolTip = string.IsNullOrEmpty(tab.Title)
+                        ? "Sleeping tab — click to wake"
+                        : $"{tab.Title} (sleeping — click to wake)";
+                    StyleTabHeader(tab, tab.Id == _activeTabId);
+                });
+            }
+        }
+
+        /// <summary>Best-effort WebView2 suspension using reflection so we work on older runtimes.</summary>
+        private static async Task<bool> TrySuspendWebViewAsync(WebView2 webView)
+        {
+            try
+            {
+                var core = webView.CoreWebView2;
+                if (core == null) return false;
+
+                var method = core.GetType().GetMethod("TrySuspendAsync");
+                if (method == null) return false;
+
+                if (method.Invoke(core, null) is Task<bool> task)
+                    return await task.ConfigureAwait(false);
+            }
+            catch
+            {
+                // Ignore failures – sleeping is a best-effort optimization.
+            }
+            return false;
+        }
+
+        /// <summary>Resume a previously suspended WebView2 instance if the API is available.</summary>
+        private static void ResumeWebView(WebView2 webView)
+        {
+            try
+            {
+                var core = webView.CoreWebView2;
+                if (core == null) return;
+                var method = core.GetType().GetMethod("Resume");
+                method?.Invoke(core, null);
+            }
+            catch
+            {
+                // Ignore failures – if resume is not available we just keep the tab as-is.
+            }
+        }
+
+        /// <summary>
+        /// Ask the tab's page to report its approximate memory usage (via JS performance APIs).
+        /// Result comes back through OnWebMessage with cat = "memory".
+        /// </summary>
+        private async void RequestTabMemoryAsync(BrowserTab tab)
+        {
+            try
+            {
+                if (!tab.IsReady) return;
+                var cw = tab.WebView?.CoreWebView2;
+                if (cw == null) return;
+
+                const string script = @"
+(async function(){
+  try {
+    if (performance && performance.measureUserAgentSpecificMemory) {
+      const r = await performance.measureUserAgentSpecificMemory();
+      window.chrome && window.chrome.webview && window.chrome.webview.postMessage({ cat: 'memory', bytes: r.bytes || 0 });
+    } else if (performance && performance.memory && (performance.memory.usedJSHeapSize || performance.memory.totalJSHeapSize)) {
+      const m = performance.memory;
+      const bytes = m.usedJSHeapSize || m.totalJSHeapSize || 0;
+      window.chrome && window.chrome.webview && window.chrome.webview.postMessage({ cat: 'memory', bytes: bytes });
+    } else {
+      window.chrome && window.chrome.webview && window.chrome.webview.postMessage({ cat: 'memory', bytes: 0 });
+    }
+  } catch(e) {
+    try {
+      window.chrome && window.chrome.webview && window.chrome.webview.postMessage({ cat: 'memory', bytes: 0 });
+    } catch(_) {}
+  }
+})();";
+
+                await cw.ExecuteScriptAsync(script);
+            }
+            catch
+            {
+                // Best-effort only; ignore failures.
+            }
+        }
+
+        // ================================================================
+        //  TAB TASK MANAGER
+        // ================================================================
+
+        private void RefreshTaskManager()
+        {
+            if (TaskManagerPopup == null || TaskManagerList == null || !TaskManagerPopup.IsOpen)
+                return;
+
+            UpdateHeavyTabs();
+
+            var rows = new List<TaskManagerRow>();
+            foreach (var tab in _tabs)
+            {
+                string title = string.IsNullOrWhiteSpace(tab.Title) ? "New Tab" : tab.Title;
+                string url = string.IsNullOrWhiteSpace(tab.Url) ? "" : tab.Url;
+
+                string memLabel = "";
+                if (tab.LastMemoryBytes is long bytes && bytes > 0)
+                {
+                    double mb = bytes / (1024.0 * 1024.0);
+                    if (mb >= 1024)
+                    {
+                        double gb = mb / 1024.0;
+                        memLabel = $"~{gb:F2} GB";
+                    }
+                    else
+                    {
+                        memLabel = $"~{mb:F1} MB";
+                    }
+                }
+                else
+                {
+                    memLabel = "";
+                }
+
+                string requestsLabel = $"{tab.Requests.Count} request" + (tab.Requests.Count == 1 ? "" : "s");
+                string blockedLabel = $"{tab.BlockedCount} blocked";
+                string sleepLabel = tab.IsSleeping ? "Sleeping" : "Sleep";
+
+                rows.Add(new TaskManagerRow
+                {
+                    Id = tab.Id,
+                    Title = title,
+                    Url = url,
+                    Memory = memLabel,
+                    RequestsLabel = requestsLabel,
+                    BlockedLabel = blockedLabel,
+                    SleepLabel = sleepLabel
+                });
+            }
+
+            TaskManagerList.ItemsSource = rows;
+        }
+
+        /// <summary>Mark tabs as heavy when they are using far more resources than the others.</summary>
+        private void UpdateHeavyTabs()
+        {
+            if (_tabs.Count == 0) return;
+
+            double avgRequests = _tabs.Average(t => t.Requests.Count);
+            double avgBlocked = _tabs.Average(t => t.BlockedCount);
+            double avgMemBytes = _tabs.Where(t => t.LastMemoryBytes is long b && b > 0).Select(t => (double)t.LastMemoryBytes!).DefaultIfEmpty(0).Average();
+
+            foreach (var tab in _tabs)
+            {
+                bool heavy = false;
+
+                // Heuristic 1: very high request volume
+                if (tab.Requests.Count > 200 && tab.Requests.Count > avgRequests * 1.5)
+                    heavy = true;
+
+                // Heuristic 2: many blocked trackers / ads
+                if (tab.BlockedCount > 50 && tab.BlockedCount > avgBlocked * 1.5)
+                    heavy = true;
+
+                // Heuristic 3: high memory vs peers (if we have data)
+                if (tab.LastMemoryBytes is long bytes && bytes > 0 && avgMemBytes > 0)
+                {
+                    double factor = bytes / avgMemBytes;
+                    if (bytes > 200 * 1024 * 1024 && factor > 1.5) // >200MB and 1.5x average
+                        heavy = true;
+                }
+
+                tab.IsHeavy = heavy;
+                if (tab.HeavyBadge != null)
+                    tab.HeavyBadge.Visibility = heavy ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        private void TaskManagerClosePopup_Click(object sender, RoutedEventArgs e)
+        {
+            if (TaskManagerPopup != null)
+                TaskManagerPopup.IsOpen = false;
+        }
+
+        private async void TaskManagerSleep_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement fe || fe.DataContext is not TaskManagerRow row)
+                return;
+
+            var tab = _tabs.FirstOrDefault(t => t.Id == row.Id);
+            if (tab == null || tab.WebView == null || tab.IsSleeping)
+                return;
+
+            bool suspended = await TrySuspendWebViewAsync(tab.WebView);
+            if (suspended)
+            {
+                tab.IsSleeping = true;
+                RefreshTaskManager();
+                StyleTabHeader(tab, tab.Id == _activeTabId);
+            }
+        }
+
+        private void TaskManagerCloseTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement fe || fe.DataContext is not TaskManagerRow row)
+                return;
+
+            CloseTab(row.Id);
+            RefreshTaskManager();
         }
 
         [System.Runtime.InteropServices.DllImport("dwmapi.dll", PreserveSig = true)]
@@ -1218,6 +1537,7 @@ namespace PrivacyMonitor
         // ================================================================
         private void OnNavigationStarting(BrowserTab tab, CoreWebView2NavigationStartingEventArgs e)
         {
+            tab.LastActivityUtc = DateTime.UtcNow;
             if (e.Uri != null && e.Uri.StartsWith("about:history", StringComparison.OrdinalIgnoreCase))
             {
                 e.Cancel = true;
@@ -1419,6 +1739,7 @@ namespace PrivacyMonitor
 
         private async void OnNavigationCompleted(BrowserTab tab, CoreWebView2NavigationCompletedEventArgs e)
         {
+            tab.LastActivityUtc = DateTime.UtcNow;
             Dispatcher.Invoke(() =>
             {
                 tab.IsLoading = false;
@@ -1760,6 +2081,44 @@ namespace PrivacyMonitor
                         if (StatusText != null) StatusText.Text = "History cleared.";
                     });
                 }
+                else if (cat == "memory")
+                {
+                    long bytes = 0;
+                    if (root.TryGetProperty("bytes", out var b))
+                    {
+                        try { bytes = b.GetInt64(); } catch { }
+                    }
+
+                    tab.LastMemoryBytes = bytes > 0 ? bytes : null;
+
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        string title = string.IsNullOrWhiteSpace(tab.Title) ? "Tab" : tab.Title;
+
+                        if (bytes > 0)
+                        {
+                            double mb = bytes / (1024.0 * 1024.0);
+                            string memLabel;
+                            if (mb >= 1024)
+                            {
+                                double gb = mb / 1024.0;
+                                memLabel = $"{gb:F2} GB";
+                            }
+                            else
+                            {
+                                memLabel = $"{mb:F1} MB";
+                            }
+
+                            // Two clean lines: title + memory
+                            tab.TabHeader.ToolTip = $"{title}\nMemory: ~{memLabel}";
+                        }
+                        else
+                        {
+                            // Fall back to just the title – no noisy extra text
+                            tab.TabHeader.ToolTip = title;
+                        }
+                    }));
+                }
             }
             catch { }
         }
@@ -1785,6 +2144,8 @@ namespace PrivacyMonitor
         // ================================================================
         private void RefreshAll()
         {
+            RefreshTaskManager();
+
             var tab = ActiveTab; if (tab == null) return;
             _lastDirtySetTicks = Environment.TickCount64;
 
@@ -1793,6 +2154,9 @@ namespace PrivacyMonitor
 
             // Update per-tab blocked badges even if sidebar is hidden
             foreach (var t in _tabs) UpdateTabBlockedBadge(t);
+
+            // Update heavy-tab indicators across all tabs
+            UpdateHeavyTabs();
 
             if (!_sidebarOpen) return; // skip heavy panel work if hidden
 
@@ -2423,11 +2787,47 @@ namespace PrivacyMonitor
         // ================================================================
         //  NAVIGATION
         // ================================================================
-        private void Back_Click(object sender, RoutedEventArgs e) => ActiveTab?.WebView.CoreWebView2?.GoBack();
-        private void Forward_Click(object sender, RoutedEventArgs e) => ActiveTab?.WebView.CoreWebView2?.GoForward();
-        private void Reload_Click(object sender, RoutedEventArgs e) => ActiveTab?.WebView.CoreWebView2?.Reload();
-        private void Go_Click(object sender, RoutedEventArgs e) => Navigate();
-        private void AddressBar_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) Navigate(); }
+        private void Back_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            if (tab?.IsReady == true)
+            {
+                tab.LastActivityUtc = DateTime.UtcNow;
+                tab.WebView.CoreWebView2.GoBack();
+            }
+        }
+
+        private void Forward_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            if (tab?.IsReady == true)
+            {
+                tab.LastActivityUtc = DateTime.UtcNow;
+                tab.WebView.CoreWebView2.GoForward();
+            }
+        }
+
+        private void Reload_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            if (tab?.IsReady == true)
+            {
+                tab.LastActivityUtc = DateTime.UtcNow;
+                tab.WebView.CoreWebView2.Reload();
+            }
+        }
+
+        private void Go_Click(object sender, RoutedEventArgs e)
+        {
+            if (ActiveTab != null)
+                Navigate();
+        }
+
+        private void AddressBar_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+                Navigate();
+        }
 
         private void AddressBar_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
             => UpdateAddressBarPlaceholder();
@@ -2466,6 +2866,7 @@ namespace PrivacyMonitor
         {
             var tab = ActiveTab;
             if (tab?.IsReady != true) return;
+            tab.LastActivityUtc = DateTime.UtcNow;
             tab.WebView.CoreWebView2.NavigateToString(GetWelcomeHtml());
         }
 
@@ -2515,6 +2916,24 @@ namespace PrivacyMonitor
         }
 
         private void MenuBookmarks_Click(object sender, RoutedEventArgs e) => Bookmarks_Click(BookmarksBtn, e);
+
+        private void MenuTaskManager_Click(object sender, RoutedEventArgs e)
+        {
+            if (TaskManagerPopup == null) return;
+            if (MenuBtn != null)
+            {
+                TaskManagerPopup.PlacementTarget = MenuBtn;
+            }
+            RefreshTaskManager();
+            TaskManagerPopup.IsOpen = true;
+
+            // Kick off fresh memory sampling for all ready tabs
+            foreach (var t in _tabs)
+            {
+                if (t.IsReady)
+                    RequestTabMemoryAsync(t);
+            }
+        }
 
         private void MenuHistory_Click(object sender, RoutedEventArgs e)
         {
@@ -2661,6 +3080,7 @@ namespace PrivacyMonitor
                 url = searchUrl + Uri.EscapeDataString(input);
             try
             {
+                tab.LastActivityUtc = DateTime.UtcNow;
                 tab.WebView.CoreWebView2.Navigate(url);
             }
             catch (Exception ex)

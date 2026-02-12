@@ -270,6 +270,7 @@
                                 <MenuItem Header="Zoom out" InputGestureText="Ctrl+-" Click="MenuZoomOut_Click"/>
                                 <MenuItem Header="Reset zoom" InputGestureText="Ctrl+0" Click="MenuZoomReset_Click"/>
                                 <Separator/>
+                                <MenuItem Header="Tab task manager" Click="MenuTaskManager_Click" ToolTip="See memory and activity for each tab"/>
                                 <MenuItem Header="Check for updates" Click="MenuCheckForUpdates_Click"/>
                                 <MenuItem Header="Keyboard shortcuts" Click="MenuShortcuts_Click"/>
                                 <MenuItem Header="Settings" Click="MenuSettings_Click"/>
@@ -398,6 +399,52 @@
                             <ListBox x:Name="BookmarksListBox" BorderThickness="0" Background="Transparent" MaxHeight="320"
                                      SelectionChanged="BookmarksList_SelectionChanged" FontSize="11" FontFamily="Segoe UI" DisplayMemberPath="Display"/>
                         </StackPanel>
+                    </Border>
+                </Popup>
+                <Popup x:Name="TaskManagerPopup" Placement="Bottom" StaysOpen="False">
+                    <Border Background="{DynamicResource MenuPopupBackground}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="0" MinWidth="420" MaxWidth="640" MaxHeight="420">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.18" Color="Black"/>
+                        </Border.Effect>
+                        <DockPanel>
+                            <!-- Header -->
+                            <Border DockPanel.Dock="Top" Padding="14,10" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="0,0,0,1" Background="{DynamicResource SidebarHeaderBackground}">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource CNav}" Width="26" Height="26"
+                                            Content="&#x2715;" FontSize="12" Click="TaskManagerClosePopup_Click" ToolTip="Close"/>
+                                    <TextBlock Text="Tab task manager" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontFamily="Segoe UI"/>
+                                </DockPanel>
+                            </Border>
+                            <!-- Body -->
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="10,8,10,10">
+                                    <TextBlock Text="Each tab's activity and memory (approximate)" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,6" FontFamily="Segoe UI"/>
+                                    <ListBox x:Name="TaskManagerList" BorderThickness="0" Background="Transparent" MaxHeight="340">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border CornerRadius="8" Background="{DynamicResource CardBackground}" Padding="10,6" Margin="0,0,0,4">
+                                                    <DockPanel>
+                                                        <StackPanel DockPanel.Dock="Left" Margin="0,0,8,0">
+                                                            <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" FontFamily="Segoe UI" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding Url}" FontSize="9" Foreground="{DynamicResource TextMuted}" FontFamily="Segoe UI" TextTrimming="CharacterEllipsis" />
+                                                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                                <TextBlock Text="{Binding Memory}" FontSize="9" Foreground="{DynamicResource TextSecondary}" Margin="0,0,12,0" FontFamily="Segoe UI"/>
+                                                                <TextBlock Text="{Binding RequestsLabel}" FontSize="9" Foreground="{DynamicResource TextSecondary}" Margin="0,0,12,0" FontFamily="Segoe UI"/>
+                                                                <TextBlock Text="{Binding BlockedLabel}" FontSize="9" Foreground="{DynamicResource TextSecondary}" FontFamily="Segoe UI"/>
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Button Content="{Binding SleepLabel}" Click="TaskManagerSleep_Click" Style="{StaticResource SecBtn}" Height="26" Padding="10,0" Margin="0,0,6,0" FontSize="10"/>
+                                                            <Button Content="Close" Click="TaskManagerCloseTab_Click" Style="{StaticResource SecBtn}" Height="26" Padding="10,0" FontSize="10"/>
+                                                        </StackPanel>
+                                                    </DockPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </DockPanel>
                     </Border>
                 </Popup>
                 <Border x:Name="CrashOverlay" Visibility="Collapsed" Background="{DynamicResource CrashOverlayBackground}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">

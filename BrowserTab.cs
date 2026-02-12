@@ -15,15 +15,24 @@ namespace PrivacyMonitor
         public TextBlock InitialBlock { get; set; } = null!;
         public Border BlockedBadge { get; set; } = null!;
         public TextBlock BlockedBadgeText { get; set; } = null!;
+        public Border? HeavyBadge { get; set; }
 
         public string Title { get; set; } = "New Tab";
         public string Url { get; set; } = "";
         public string CurrentHost { get; set; } = "";
         public DateTime ScanStart { get; set; } = DateTime.Now;
+        /// <summary>Last time this tab had user or network activity (UTC). Used for idle sleep.</summary>
+        public DateTime LastActivityUtc { get; set; } = DateTime.UtcNow;
+        /// <summary>Last measured approximate memory usage for this tab (bytes, from JS APIs).</summary>
+        public long? LastMemoryBytes { get; set; }
         public int NextRequestId;
         public bool IsReady { get; set; }
         public bool IsLoading { get; set; }
         public bool IsCrashed { get; set; }
+        /// <summary>True when the underlying WebView2 has been suspended to save resources.</summary>
+        public bool IsSleeping { get; set; }
+        /// <summary>True when this tab is using far more resources than others (for UI hint).</summary>
+        public bool IsHeavy { get; set; }
         public bool IsSecure { get; set; }
         public bool ConsentDetected { get; set; }
 
