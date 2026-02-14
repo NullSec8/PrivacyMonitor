@@ -235,6 +235,7 @@ namespace PrivacyMonitor
             string search = EscapeHtml(_settings.SearchEngineUrl ?? "https://duckduckgo.com/?q=");
             string bp = _settings.BlockPopups ? " checked" : "";
             string hi = _settings.HideInPageAds ? " checked" : "";
+            string usage = _settings.AllowUsageData ? " checked" : "";
             string proxy = EscapeHtml(_settings.ProxyUrl ?? "");
             string msgContent = showSavedMessage ? "Saved. Restart or open a new tab to apply." : "";
             return $@"<!DOCTYPE html><html><head><meta name='color-scheme' content='light dark'/><meta charset='utf-8'/><title>Settings</title><style>
@@ -258,16 +259,17 @@ namespace PrivacyMonitor
             <div class='section'><label>Search engine URL (use %s for query, or e.g. https://duckduckgo.com/?q=)</label><input type='text' id='searchEngineUrl' value='{search}'/></div>
             <div class='section'><label><input type='checkbox' id='blockPopups'{bp}/> Block pop-ups</label></div>
             <div class='section'><label><input type='checkbox' id='hideInPageAds'{hi}/> Hide in-page ads (cosmetic filter)</label></div>
+            <div class='section'><label><input type='checkbox' id='allowUsageData'{usage}/> Help improve Privacy Monitor by sending anonymous usage data (version, OS, protection level). No URLs or personal data.</label></div>
             <div class='section'><label>Proxy (optional — hides your IP from sites)</label><input type='text' id='proxyUrl' value='{proxy}' placeholder='e.g. http://127.0.0.1:8080 or socks5://127.0.0.1:1080'/></div>
             <button type='button' class='btn' id='save'>Save</button>
             <div id='msg'>{msgContent}</div>
             <script>
             (function(){{
-                var home=document.getElementById('homePage'), start=document.getElementById('startup'), search=document.getElementById('searchEngineUrl'), blockPopups=document.getElementById('blockPopups'), hideInPageAds=document.getElementById('hideInPageAds'), proxyUrl=document.getElementById('proxyUrl'), save=document.getElementById('save'), msgEl=document.getElementById('msg');
+                var home=document.getElementById('homePage'), start=document.getElementById('startup'), search=document.getElementById('searchEngineUrl'), blockPopups=document.getElementById('blockPopups'), hideInPageAds=document.getElementById('hideInPageAds'), allowUsageData=document.getElementById('allowUsageData'), proxyUrl=document.getElementById('proxyUrl'), save=document.getElementById('save'), msgEl=document.getElementById('msg');
                 save.onclick=function(ev){{
                     if(ev){{ ev.preventDefault(); ev.stopPropagation(); }}
                     var hp=(home.value||'').trim()||'about:welcome', st=start.value||'restore', se=(search.value||'').trim()||'https://duckduckgo.com/?q=', px=(proxyUrl&&proxyUrl.value)?proxyUrl.value.trim():'';
-                    var msg={{cat:'settings',homePage:hp,startup:st,searchEngineUrl:se,blockPopups:blockPopups.checked,hideInPageAds:hideInPageAds.checked,proxyUrl:px}}, j=JSON.stringify(msg);
+                    var msg={{cat:'settings',homePage:hp,startup:st,searchEngineUrl:se,blockPopups:blockPopups.checked,hideInPageAds:hideInPageAds.checked,allowUsageData:!!(allowUsageData&&allowUsageData.checked),proxyUrl:px}}, j=JSON.stringify(msg);
                     try{{
                         if(window.chrome&&window.chrome.webview&&window.chrome.webview.hostObjects&&window.chrome.webview.hostObjects.sync&&window.chrome.webview.hostObjects.sync.settingsBridge){{ window.chrome.webview.hostObjects.sync.settingsBridge.Save(j); return false; }}
                         if(window.chrome&&window.chrome.webview&&window.chrome.webview.postMessage){{ window.chrome.webview.postMessage(j); return false; }}
@@ -320,6 +322,24 @@ namespace PrivacyMonitor
                 ApplyTheme(SystemThemeDetector.IsDarkMode);
                 SetProtectionMenuChecked(ProtectionEngine.GlobalDefaultMode); // sync pill + menu with default
                 SystemThemeDetector.ThemeChanged += OnSystemThemeChanged;
+                if (App.UpdateAvailableVersion != null && MenuCheckUpdatesItem != null)
+                    MenuCheckUpdatesItem.Header = $"Update available (v{App.UpdateAvailableVersion})";
+            };
+            App.OnUpdateAvailable += (_, newVer) =>
+            {
+                if (MenuCheckUpdatesItem != null)
+                    MenuCheckUpdatesItem.Header = $"Update available (v{newVer})";
+            };
+
+            Loaded += (_, _) =>
+            {
+                var delay = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+                delay.Tick += (_, _) =>
+                {
+                    delay.Stop();
+                    _ = UpdateService.SendUsageAsync(_settings.AllowUsageData, ProtectionEngine.GlobalDefaultMode.ToString());
+                };
+                delay.Start();
             };
 
             _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -412,6 +432,7 @@ namespace PrivacyMonitor
                 _settings.SearchEngineUrl = root.TryGetProperty("searchEngineUrl", out var se) ? se.GetString() ?? "https://duckduckgo.com/?q=" : "https://duckduckgo.com/?q=";
                 if (root.TryGetProperty("blockPopups", out var bp)) _settings.BlockPopups = bp.ValueKind == JsonValueKind.True;
                 if (root.TryGetProperty("hideInPageAds", out var hi)) _settings.HideInPageAds = hi.ValueKind == JsonValueKind.True;
+                if (root.TryGetProperty("allowUsageData", out var au)) _settings.AllowUsageData = au.ValueKind == JsonValueKind.True;
                 if (root.TryGetProperty("proxyUrl", out var px)) _settings.ProxyUrl = px.GetString() ?? "";
             }
             catch { }
@@ -1007,7 +1028,8 @@ namespace PrivacyMonitor
             foreach (var t in _tabs)
             {
                 bool active = t.Id == tabId;
-                t.WebView.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+                if (t.WebView != null)
+                    t.WebView.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
 
                 if (active)
                 {
@@ -1571,6 +1593,7 @@ namespace PrivacyMonitor
                                     else if (key.Equals("searchEngineUrl", StringComparison.OrdinalIgnoreCase)) _settings.SearchEngineUrl = val ?? "https://duckduckgo.com/?q=";
                                     else if (key.Equals("blockPopups", StringComparison.OrdinalIgnoreCase)) _settings.BlockPopups = val.Equals("true", StringComparison.OrdinalIgnoreCase);
                                     else if (key.Equals("hideInPageAds", StringComparison.OrdinalIgnoreCase)) _settings.HideInPageAds = val.Equals("true", StringComparison.OrdinalIgnoreCase);
+                                    else if (key.Equals("allowUsageData", StringComparison.OrdinalIgnoreCase)) _settings.AllowUsageData = val.Equals("true", StringComparison.OrdinalIgnoreCase);
                                     else if (key.Equals("proxyUrl", StringComparison.OrdinalIgnoreCase)) _settings.ProxyUrl = val ?? "";
                                 }
                                 SaveSettings();
@@ -2892,7 +2915,7 @@ namespace PrivacyMonitor
         private void Bookmarks_Click(object sender, RoutedEventArgs e)
         {
             if (BookmarksBtn != null) BookmarksPopup.PlacementTarget = BookmarksBtn;
-            BookmarksListBox.ItemsSource = _bookmarks.OrderByDescending(b => b.Added).Select(b => new { Display = b.Title.Length > 0 ? b.Title : b.Url, b.Url }).ToList();
+            RefreshBookmarksList();
             BookmarksPopup.IsOpen = true;
         }
 
@@ -2987,43 +3010,138 @@ namespace PrivacyMonitor
 
         private async void MenuCheckForUpdates_Click(object sender, RoutedEventArgs e)
         {
-            const string buildInfoUrl = "https://raw.githubusercontent.com/NullSec8/PrivacyMonitor/main/website/assets/build-info.json";
-            const string releasesUrl = "https://github.com/NullSec8/PrivacyMonitor/releases";
-            var ver = Assembly.GetExecutingAssembly().GetName().Version;
-            string current = ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "1.0.0";
+            string current = UpdateService.CurrentVersion;
             try
             {
-                using var client = new HttpClient();
-                client.DefaultRequestHeaders.Add("User-Agent", "PrivacyMonitor/1.0");
-                string json = await client.GetStringAsync(buildInfoUrl).ConfigureAwait(true);
-                var doc = JsonDocument.Parse(json);
-                string? latest = doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
-                if (string.IsNullOrEmpty(latest)) { MessageBox.Show(this, "Could not read latest version.", "Check for updates", MessageBoxButton.OK, MessageBoxImage.Information); return; }
-                if (Version.TryParse(latest, out var latestVer) && Version.TryParse(current, out var currentVer) && latestVer > currentVer)
+                var (latestInfo, errorMessage) = await UpdateService.GetLatestWithErrorAsync().ConfigureAwait(true);
+                if (latestInfo == null)
                 {
-                    var result = MessageBox.Show(this, $"A new version ({latest}) is available.\n\nCurrent: {current}\n\nOpen download page?", "Update available", MessageBoxButton.YesNo, MessageBoxImage.Information);
-                    if (result == MessageBoxResult.Yes)
-                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(releasesUrl) { UseShellExecute = true });
+                    var msg = string.IsNullOrEmpty(errorMessage)
+                        ? "Could not reach the update server. Make sure you're online and that the server is available."
+                        : "Could not reach the update server.\n\nReason: " + errorMessage;
+                    msg += "\n\nTip: If you see 'timed out' or 'blocked', allow PrivacyMonitor.exe through Windows Firewall (outbound to the internet).";
+                    MessageBox.Show(this, msg, "Check for updates", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                string latest = latestInfo.Version;
+                if (UpdateService.CompareVersions(current, latest) < 0)
+                {
+                    var result = MessageBox.Show(this,
+                        $"A new version ({latest}) is available.\n\nCurrent: {current}\n\nDownload and restart now to update?",
+                        "Update available", MessageBoxButton.YesNo, MessageBoxImage.Information);
+                    if (result != MessageBoxResult.Yes) return;
+                    await DownloadAndApplyUpdateAsync(latest).ConfigureAwait(true);
                 }
                 else
                     MessageBox.Show(this, $"You're up to date.\nVersion {current}", "Check for updates", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "Could not check for updates.\n" + ex.Message, "Check for updates", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, "Could not check for updates. The update server may be unreachable.\n\n" + ex.Message, "Check for updates", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
-        private void BookmarksList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async System.Threading.Tasks.Task DownloadAndApplyUpdateAsync(string version)
         {
-            if (BookmarksListBox.SelectedItem == null) return;
-            var item = BookmarksListBox.SelectedItem;
+            var progress = new Progress<double>(p => { });
+            Dispatcher.Invoke(() => { if (StatusText != null) StatusText.Text = "Downloading update..."; });
+            var (extractDir, errorMessage) = await UpdateService.DownloadUpdateAsync(version, progress).ConfigureAwait(true);
+            if (string.IsNullOrEmpty(extractDir))
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    if (StatusText != null) StatusText.Text = "";
+                    var msg = string.IsNullOrEmpty(errorMessage) ? "Update download failed." : "Update download failed.\n\n" + errorMessage;
+                    MessageBox.Show(this, msg, "Update", MessageBoxButton.OK, MessageBoxImage.Warning);
+                });
+                return;
+            }
+            Dispatcher.Invoke(() =>
+            {
+                if (StatusText != null) StatusText.Text = "Restarting to apply update...";
+                UpdateService.ApplyUpdateAndRestart(extractDir);
+                _ = UpdateService.LogInstallAsync(version);
+                Application.Current.Shutdown(0);
+            });
+        }
+
+        private void RefreshBookmarksList()
+        {
+            if (BookmarksListBox == null) return;
+            BookmarksListBox.ItemsSource = _bookmarks
+                .OrderByDescending(b => b.Added)
+                .Select(b => new { Display = b.Title.Length > 0 ? b.Title : b.Url, b.Url })
+                .ToList();
+        }
+
+        private void OpenSelectedBookmark(object? sourceItem = null)
+        {
+            if (BookmarksListBox == null) return;
+            var item = sourceItem ?? BookmarksListBox.SelectedItem;
+            if (item == null) return;
             var urlProp = item.GetType().GetProperty("Url");
             var url = urlProp?.GetValue(item)?.ToString() ?? "";
             if (string.IsNullOrEmpty(url)) return;
             BookmarksPopup.IsOpen = false;
             var tab = ActiveTab;
-            if (tab?.IsReady == true) try { tab.WebView.CoreWebView2.Navigate(url); } catch { }
+            if (tab?.IsReady == true)
+            {
+                try { tab.WebView.CoreWebView2.Navigate(url); } catch { }
+            }
+        }
+
+        private void RemoveSelectedBookmark(object? sourceItem = null)
+        {
+            if (BookmarksListBox == null) return;
+            var item = sourceItem ?? BookmarksListBox.SelectedItem;
+            if (item == null) return;
+            var urlProp = item.GetType().GetProperty("Url");
+            var url = urlProp?.GetValue(item)?.ToString() ?? "";
+            if (string.IsNullOrEmpty(url)) return;
+
+            var existing = _bookmarks.FirstOrDefault(b => string.Equals(b.Url, url, StringComparison.OrdinalIgnoreCase));
+            if (existing == null) return;
+
+            _bookmarks.Remove(existing);
+            SaveBookmarks();
+            RefreshBookmarksList();
+            UpdateStarButton();
+            if (StatusText != null) StatusText.Text = "Bookmark removed.";
+        }
+
+        private void BookmarksList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Keep selection in sync; open/delete is handled via Enter, Delete, or context menu.
+        }
+
+        private void BookmarksList_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                OpenSelectedBookmark();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Delete)
+            {
+                RemoveSelectedBookmark();
+                e.Handled = true;
+            }
+        }
+
+        private void BookmarksOpen_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext != null)
+                OpenSelectedBookmark(fe.DataContext);
+            else
+                OpenSelectedBookmark();
+        }
+
+        private void BookmarksRemove_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext != null)
+                RemoveSelectedBookmark(fe.DataContext);
+            else
+                RemoveSelectedBookmark();
         }
 
         private void UpdateStarButton()

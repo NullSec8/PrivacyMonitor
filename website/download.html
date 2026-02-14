@@ -6,7 +6,7 @@
   <title>Download - Privacy Monitor</title>
   <meta name="description" content="Download Privacy Monitor for Windows 10/11. Single-file executable, no installer. Ready for any PC.">
   <link rel="icon" href="assets/logo.png">
-  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/styles.css?v=3">
 </head>
 <body>
   <nav class="nav">
@@ -24,28 +24,33 @@
     </div>
   </nav>
 
-  <section class="section download-section">
+  <section class="section page-hero download-section">
     <div class="container">
-      <h1>Download for Windows</h1>
-      <p class="section-desc">Single-file app. No installer. Works on any Windows 10/11 (64-bit) PC.</p>
+      <h1 class="reveal">Download for Windows</h1>
+      <p class="section-desc reveal stagger-1">Single-file app. No installer. Works on any Windows 10/11 (64-bit) PC.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
 
       <div class="download-cards">
-        <div class="download-card primary">
-          <h3>PrivacyMonitor.exe</h3>
-          <p>Direct executable. Double-click to run.</p>
-          <p class="meta" id="exe-meta">—</p>
-          <a class="cta cta-large" href="PrivacyMonitor.exe" download="PrivacyMonitor.exe">Download EXE</a>
-        </div>
-        <div class="download-card">
-          <h3>ZIP package</h3>
-          <p>EXE + INSTALL.txt for sharing or offline install.</p>
+        <div class="download-card primary fade-in stagger-1">
+          <h3>Download latest (ZIP)</h3>
+          <p>EXE + INSTALL.txt. Extract and run PrivacyMonitor.exe. Recommended.</p>
           <p class="meta" id="zip-meta">—</p>
-          <a class="cta cta-secondary" href="#" id="zip-link" style="display:none;">Download ZIP</a>
-          <span id="zip-unavailable" class="muted small">Run <code>publish.ps1</code> to generate.</span>
+          <a class="cta cta-large" href="#" id="zip-link">Download latest</a>
+          <p class="muted small" style="margin-top:8px;">Served from our update server. Version shown below.</p>
+        </div>
+        <div class="download-card fade-in stagger-2">
+          <h3>Direct EXE (if available)</h3>
+          <p>Single executable from this site.</p>
+          <p class="meta" id="exe-meta">—</p>
+          <a class="cta cta-secondary" href="PrivacyMonitor.exe" download="PrivacyMonitor.exe" id="exe-link">Download EXE</a>
         </div>
       </div>
 
-      <div class="install-steps card-panel">
+      <div class="install-steps card-panel reveal">
         <h3>Install on any PC</h3>
         <ol class="steps-list">
           <li><strong>Download</strong> PrivacyMonitor.exe (or the ZIP) to your computer.</li>
@@ -58,7 +63,7 @@
         <p class="muted small">Your settings are stored under <code>%LocalAppData%\PrivacyMonitor</code>. The app does not send data to any server.</p>
       </div>
 
-      <div class="install-steps card-panel">
+      <div class="install-steps card-panel reveal">
         <h3>System requirements</h3>
         <ul class="steps-list">
           <li>Windows 10 or 11 (64-bit)</li>
@@ -67,7 +72,7 @@
         </ul>
       </div>
 
-      <div class="install-steps card-panel verify-panel">
+      <div class="install-steps card-panel verify-panel reveal">
         <h3>Verify download (optional)</h3>
         <p class="muted small">After downloading, you can check the file hash to ensure it wasn’t modified.</p>
         <p><strong>SHA256:</strong></p>
@@ -77,7 +82,7 @@
     </div>
   </section>
 
-  <footer class="footer">
+  <footer class="footer reveal">
     <div class="container footer-inner">
       <div class="footer-links">
         <a href="features.html">Features</a>
@@ -89,27 +94,43 @@
 
   <script>
     (function() {
-      fetch('assets/build-info.json')
+      var zipLink = document.getElementById('zip-link');
+      var zipMeta = document.getElementById('zip-meta');
+      var exeMeta = document.getElementById('exe-meta');
+
+      function applyFromApi(info) {
+        if (info && info.version) {
+          zipMeta.textContent = 'Version ' + info.version;
+          zipLink.href = '/api/download/latest?platform=win64';
+          zipLink.download = (info.downloads && info.downloads.win64) ? info.downloads.win64 : 'PrivacyMonitor-win-x64.zip';
+          zipLink.style.display = 'inline-flex';
+        }
+      }
+
+      function applyFromBuildInfo(info) {
+        if (!info) return;
+        if (info.version) exeMeta.textContent = 'Version ' + info.version + (info.sizeMB ? ' · ' + info.sizeMB + ' MB' : '');
+        if (info.sha256) document.getElementById('sha256-value').textContent = info.sha256;
+        if (info.zipName && !zipLink.href) {
+          zipLink.href = info.zipName;
+          zipLink.download = info.zipName;
+          zipLink.style.display = 'inline-flex';
+          zipMeta.textContent = info.zipName + (info.zipSizeMB ? ' · ' + info.zipSizeMB + ' MB' : '');
+        }
+      }
+
+      fetch('/api/latest')
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(info) {
-          if (!info) return;
-          if (info.version) {
-            document.getElementById('exe-meta').textContent = 'Version ' + info.version + (info.sizeMB ? ' · ' + info.sizeMB + ' MB' : '');
-          }
-          if (info.sha256) {
-            document.getElementById('sha256-value').textContent = info.sha256;
-          }
-          if (info.zipName) {
-            var zipLink = document.getElementById('zip-link');
-            zipLink.href = info.zipName;
-            zipLink.download = info.zipName;
-            zipLink.style.display = 'inline-flex';
-            document.getElementById('zip-unavailable').style.display = 'none';
-            document.getElementById('zip-meta').textContent = info.zipName + (info.zipSizeMB ? ' · ' + info.zipSizeMB + ' MB' : '');
-          }
+          applyFromApi(info);
+          return fetch('assets/build-info.json').then(function(r) { return r.ok ? r.json() : null; });
         })
-        .catch(function() {});
+        .catch(function() { return null; })
+        .then(function(info) {
+          applyFromBuildInfo(info);
+        });
     })();
   </script>
+  <script src="assets/app.js"></script>
 </body>
 </html>

@@ -133,10 +133,12 @@ function requireAdminSession(req, res, next) {
 
 function requireAdminSessionOrRedirect(req, res, next) {
   if (!ADMIN_PASSWORD || !SESSION_SECRET) {
+    res.set('Cache-Control', 'no-store');
     return res.redirect(302, '/admin?error=config');
   }
   const session = verifySession(req.cookies[ADMIN_COOKIE_NAME]);
   if (!session || session.user !== ADMIN_USERNAME) {
+    res.set('Cache-Control', 'no-store');
     return res.redirect(302, '/admin');
   }
   req.adminSession = session;
@@ -449,6 +451,7 @@ app.get('/admin', (req, res) => {
 app.get('/logs.html', requireAdminSessionOrRedirect, (req, res) => {
   const filePath = path.join(WEBSITE_DIR, 'logs.html');
   if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.sendFile(filePath);
 });
 
@@ -456,6 +459,7 @@ app.get('/logs.html', requireAdminSessionOrRedirect, (req, res) => {
 app.get('/setup-2fa.html', requireAdminSessionOrRedirect, (req, res) => {
   const filePath = path.join(WEBSITE_DIR, 'setup-2fa.html');
   if (!fs.existsSync(filePath)) return res.status(404).send('Not found');
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.sendFile(filePath);
 });
 
@@ -463,8 +467,14 @@ app.get('/setup-2fa.html', requireAdminSessionOrRedirect, (req, res) => {
 app.use('/builds', express.static(BUILDS_DIR, { index: false }));
 
 // ---------- Website (index, download, features, security, assets) ----------
+// Never serve admin-only pages as static; only the protected routes above may serve them.
+const PROTECTED_PATHS = ['/logs.html', '/setup-2fa.html'];
+const websiteStatic = express.static(WEBSITE_DIR, { index: 'index.html' });
 if (fs.existsSync(WEBSITE_DIR)) {
-  app.use(express.static(WEBSITE_DIR, { index: 'index.html' }));
+  app.use((req, res, next) => {
+    if (PROTECTED_PATHS.includes(req.path)) return next();
+    websiteStatic(req, res, next);
+  });
 }
 
 // ---------- Health ----------

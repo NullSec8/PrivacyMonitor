@@ -214,6 +214,10 @@ namespace PrivacyMonitor
         /// <summary>Optional proxy URL so browsing uses the proxy IP instead of your public IP. e.g. http://127.0.0.1:8080 or socks5://127.0.0.1:1080. New tabs use this.</summary>
         [JsonPropertyName("proxyUrl")]
         public string ProxyUrl { get; set; } = "";
+
+        /// <summary>If true, send anonymous usage data (version, OS, protection level) to help improve the browser. No URLs or personal data.</summary>
+        [JsonPropertyName("allowUsageData")]
+        public bool AllowUsageData { get; set; } = true;
     }
 
     public class PrivacyScore

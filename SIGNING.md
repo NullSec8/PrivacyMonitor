@@ -4,6 +4,25 @@ Windows shows **“Windows protected your PC”** or **“This app might harm yo
 
 ---
 
+## Quick start (you already have a .pfx certificate)
+
+1. **Install Windows SDK** (for `signtool.exe`) if you haven’t: [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/). Or use Visual Studio with the Windows development workload.
+
+2. **Set your certificate** (PowerShell, one-time or in your profile):
+   ```powershell
+   $env:CERT_PATH     = "C:\Path\To\YourCertificate.pfx"
+   $env:CERT_PASSWORD = "YourCertificatePassword"
+   ```
+   Optional: `$env:SIGNTOOL_PATH = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe"` if auto-detect fails.
+
+3. **Sign the build** (either method):
+   - **During publish:** run `.\publish.ps1` — it will sign the EXE automatically if `CERT_PATH` and `CERT_PASSWORD` are set.
+   - **After publish:** run `.\sign.ps1` to sign the existing `publish\win-x64\PrivacyMonitor.exe` and copy it to `website\PrivacyMonitor.exe`.
+
+4. **Upload** the signed EXE (and zip) to your server. Users will get no (or minimal) SmartScreen warning once the cert is trusted.
+
+---
+
 ## Option 1: SignPath Foundation (free for open source)
 
 SignPath gives **free code signing** to open source projects. Windows will trust the signed EXE.
@@ -70,7 +89,15 @@ The script will build the EXE and then sign it. The copy that goes to `website\`
 
 **B) Signing by hand (after publish)**
 
-If you prefer to sign only the final EXE:
+Use the included script (recommended):
+
+```powershell
+$env:CERT_PATH = "C:\path\to\your.pfx"
+$env:CERT_PASSWORD = "YourPassword"
+.\sign.ps1
+```
+
+Or call signtool directly:
 
 ```powershell
 signtool sign /f "C:\path\to\your.pfx" /p "YourPassword" /tr http://timestamp.digicert.com /td sha256 /fd sha256 "publish\win-x64\PrivacyMonitor.exe"

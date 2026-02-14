@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Security & Privacy - PrivacyMonitor</title>
   <link rel="icon" href="assets/logo.png">
-  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/styles.css?v=3">
 </head>
 <body>
   <nav class="nav">
@@ -23,33 +23,29 @@
     </div>
   </nav>
 
+  <section class="section page-hero">
+    <div class="container">
+      <h1 class="reveal">Security & Privacy</h1>
+      <p class="section-desc reveal stagger-1">All analysis runs on your machine. No telemetry is sent to third parties.</p>
+    </div>
+  </section>
+
   <section class="section">
     <div class="container">
-      <h2>Security & Privacy</h2>
-      <p>PrivacyMonitor runs all analysis locally. No telemetry is sent to third parties.</p>
-
-      <div class="download-panel" style="margin-top:16px;">
-        <div>
-          <strong>Local-only analysis</strong>
-          <p style="color:#5B6777;">Requests, fingerprints, and forensic evidence are processed on your machine.</p>
-        </div>
-        <div>
-          <strong>GDPR-friendly reporting</strong>
-          <p style="color:#5B6777;">Reports map signals to GDPR-oriented findings for compliance review.</p>
-        </div>
-        <div>
-          <strong>Per-site protection</strong>
-          <p style="color:#5B6777;">Monitor, Block Known, or Aggressive modes per site with anti-fingerprint and ad blocking toggles.</p>
-        </div>
-        <div>
-          <strong>Transparent storage</strong>
-          <p style="color:#5B6777;">Only local settings and learned trackers are saved under %AppData%\PrivacyMonitor\.</p>
-        </div>
+      <div class="download-panel reveal">
+        <strong>Local-only analysis</strong>
+        <p>Requests, fingerprints, and forensic evidence are processed on your machine.</p>
+        <strong>GDPR-friendly reporting</strong>
+        <p>Reports map signals to GDPR-oriented findings for compliance review.</p>
+        <strong>Per-site protection</strong>
+        <p>Monitor, Block Known, or Aggressive modes per site with anti-fingerprint and ad blocking toggles.</p>
+        <strong>Transparent storage</strong>
+        <p>Only local settings and learned trackers are saved under %AppData%\PrivacyMonitor\.</p>
       </div>
     </div>
   </section>
 
-  <footer class="footer">
+  <footer class="footer reveal">
     <div class="container footer-inner">
       <div class="footer-links">
         <a href="features.html">Features</a>
@@ -58,5 +54,6 @@
       <div>© 2026 Privacy Monitor</div>
     </div>
   </footer>
+  <script src="assets/app.js"></script>
 </body>
 </html>

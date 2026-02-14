@@ -1,7 +1,7 @@
 <Window x:Class="PrivacyMonitor.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Privacy Monitor" Width="1480" Height="920" MinWidth="900" MinHeight="600"
+        Title="Privacy Monitor – Update test 1.0.1" Width="1480" Height="920" MinWidth="900" MinHeight="600"
         Background="{DynamicResource WindowBackground}" WindowStartupLocation="CenterScreen"
         WindowState="Maximized"
         UseLayoutRounding="True"
@@ -271,7 +271,7 @@
                                 <MenuItem Header="Reset zoom" InputGestureText="Ctrl+0" Click="MenuZoomReset_Click"/>
                                 <Separator/>
                                 <MenuItem Header="Tab task manager" Click="MenuTaskManager_Click" ToolTip="See memory and activity for each tab"/>
-                                <MenuItem Header="Check for updates" Click="MenuCheckForUpdates_Click"/>
+                                <MenuItem x:Name="MenuCheckUpdatesItem" Header="Check for updates" Click="MenuCheckForUpdates_Click"/>
                                 <MenuItem Header="Keyboard shortcuts" Click="MenuShortcuts_Click"/>
                                 <MenuItem Header="Settings" Click="MenuSettings_Click"/>
                                 <Separator/>
@@ -395,9 +395,29 @@
                     <Border Background="{DynamicResource MenuPopupBackground}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="0" MinWidth="280" MaxHeight="400">
                         <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.15" Color="Black"/></Border.Effect>
                         <StackPanel>
-                            <TextBlock Text="Bookmarks" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" Margin="14,12,14,8" FontFamily="Segoe UI"/>
+                            <TextBlock Text="Bookmarks" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" Margin="14,12,8,8" FontFamily="Segoe UI"/>
                             <ListBox x:Name="BookmarksListBox" BorderThickness="0" Background="Transparent" MaxHeight="320"
-                                     SelectionChanged="BookmarksList_SelectionChanged" FontSize="11" FontFamily="Segoe UI" DisplayMemberPath="Display"/>
+                                     SelectionChanged="BookmarksList_SelectionChanged" KeyDown="BookmarksList_KeyDown"
+                                     FontSize="11" FontFamily="Segoe UI">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <DockPanel LastChildFill="True">
+                                            <Button DockPanel.Dock="Right" Content="Remove" Click="BookmarksRemove_Click"
+                                                    Style="{StaticResource SecBtn}" Height="22" Padding="10,0" Margin="6,0,4,0"
+                                                    FontSize="10" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding Display}" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextPrimary}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                                <ListBox.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Open" Click="BookmarksOpen_Click"/>
+                                        <MenuItem Header="Remove bookmark" Click="BookmarksRemove_Click"/>
+                                    </ContextMenu>
+                                </ListBox.ContextMenu>
+                            </ListBox>
                         </StackPanel>
                     </Border>
                 </Popup>
