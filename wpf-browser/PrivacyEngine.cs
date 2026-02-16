@@ -922,16 +922,18 @@ namespace PrivacyMonitor
                     double entropy = ShannonEntropy(val);
                     bool isBase64 = Base64Payload.IsMatch(val);
                     bool isHex = HexPayload.IsMatch(val);
+                    bool hasEntropyPattern = HighEntropyPattern.IsMatch(val);
 
-                    if (entropy > 4.0 || isBase64 || isHex)
+                    if (entropy > 3.8 || isBase64 || isHex || hasEntropyPattern)
                     {
-                        double conf = entropy > 4.5 ? 0.85 : entropy > 4.0 ? 0.70 : 0.55;
-                        if (isBase64 || isHex) conf = Math.Max(conf, 0.75);
+                        double conf = entropy > 4.5 ? 0.85 : entropy > 4.0 ? 0.75 : 0.60;
+                        if (isBase64 || isHex || hasEntropyPattern) conf = Math.Max(conf, 0.80);
                         signals.Add(new DetectionSignal
                         {
                             SignalType = "high_entropy_param",
                             Source = req.Host,
-                            Detail = $"Param '{parts[0]}' has high entropy ({entropy:F1}) — possible obfuscated tracking ID" + (isBase64 ? " [Base64]" : "") + (isHex ? " [Hex]" : ""),
+                            Detail = $"Param '{parts[0]}' has high-entropy identifier ({entropy:F1}) — possible obfuscated tracking ID"
+                                     + (isBase64 ? " [Base64]" : "") + (isHex ? " [Hex]" : "") + (hasEntropyPattern ? " [Random-looking]" : ""),
                             Confidence = conf,
                             Risk = RiskType.Tracking,
                             Severity = 3,
@@ -1047,16 +1049,24 @@ namespace PrivacyMonitor
                           (req.Path?.Contains("sync", StringComparison.OrdinalIgnoreCase) ?? false) ||
                           (req.Path?.Contains("match", StringComparison.OrdinalIgnoreCase) ?? false);
 
-            if (hasIds)
+            bool highRiskTracker =
+                string.Equals(req.TrackerCategoryName, "Advertising", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(req.TrackerCategoryName, "DMP", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(req.TrackerCategoryName, "Attribution", StringComparison.OrdinalIgnoreCase);
+
+            if (hasIds || highRiskTracker)
             {
+                double confidence = highRiskTracker ? 0.80 : 0.70;
+                int severity = highRiskTracker ? 5 : 4;
+
                 signals.Add(new DetectionSignal
                 {
                     SignalType = "cookie_sync",
                     Source = req.Host,
                     Detail = "Cookie sync detected — identifiers passed to third-party ad-tech",
-                    Confidence = 0.70,
+                    Confidence = confidence,
                     Risk = RiskType.Tracking,
-                    Severity = 4,
+                    Severity = severity,
                     Evidence = $"Cookie header present with tracking params to {req.Host}",
                     GdprArticle = "Art. 5(1)(a)"
                 });
@@ -1099,6 +1109,19 @@ namespace PrivacyMonitor
             var lower = name.ToLowerInvariant();
             if (TrackingCookiePatterns.Any(p => lower.StartsWith(p.ToLowerInvariant()) || lower == p.ToLowerInvariant()))
                 return "Tracking / Analytics";
+
+            // Stronger heuristic: generic identifier-style cookies used by many tracking stacks
+            if (lower.Contains("visitorid") || lower.Contains("visitor_id") ||
+                lower.Contains("deviceid") || lower.Contains("device_id") ||
+                lower.Contains("userid") || lower.Contains("user_id") ||
+                lower.Contains("clientid") || lower.Contains("client_id") ||
+                lower.Contains("customerid") || lower.Contains("customer_id") ||
+                lower.Contains("browserid") || lower.Contains("browser_id") ||
+                lower.Contains("uuid"))
+            {
+                return "Tracking / Analytics";
+            }
+
             if (lower.Contains("session") || lower.Contains("sid") || lower.Contains("csrf") || lower.Contains("token") || lower.Contains("auth"))
                 return "Session / Security";
             if (lower.Contains("consent") || lower.Contains("gdpr") || lower.Contains("ccpa") || lower.Contains("cookie") || lower.Contains("optanon"))
@@ -1113,6 +1136,19 @@ namespace PrivacyMonitor
             var lower = key.ToLowerInvariant();
             if (TrackingCookiePatterns.Any(p => lower.Contains(p.ToLowerInvariant())))
                 return "Tracking / Analytics";
+
+            // Stronger heuristic: identifier-style keys commonly used for tracking
+            if (lower.Contains("visitorid") || lower.Contains("visitor_id") ||
+                lower.Contains("deviceid") || lower.Contains("device_id") ||
+                lower.Contains("userid") || lower.Contains("user_id") ||
+                lower.Contains("clientid") || lower.Contains("client_id") ||
+                lower.Contains("customerid") || lower.Contains("customer_id") ||
+                lower.Contains("browserid") || lower.Contains("browser_id") ||
+                lower.Contains("uuid"))
+            {
+                return "Tracking / Analytics";
+            }
+
             if (lower.Contains("token") || lower.Contains("auth") || lower.Contains("session"))
                 return "Authentication";
             if (lower.Contains("cache") || lower.Contains("sw-") || lower.Contains("workbox"))
@@ -1155,6 +1191,24 @@ namespace PrivacyMonitor
             var url = (req.FullUrl ?? "").ToLowerInvariant();
             if (url.Contains("geo") || url.Contains("location") || url.Contains("lat=") || url.Contains("lng=")) tags.Add("Location data");
             if (url.Contains("email") || url.Contains("phone") || url.Contains("name=") || url.Contains("address")) tags.Add("Possible PII");
+
+            if (req.IsThirdParty) tags.Add("Shared with other companies");
+
+            if (!string.IsNullOrEmpty(req.TrackerCategoryName))
+            {
+                if (string.Equals(req.TrackerCategoryName, "Advertising", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(req.TrackerCategoryName, "DMP", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(req.TrackerCategoryName, "Attribution", StringComparison.OrdinalIgnoreCase))
+                {
+                    tags.Add("Ad-tech / profiling");
+                }
+                else if (string.Equals(req.TrackerCategoryName, "Analytics", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(req.TrackerCategoryName, "SessionReplay", StringComparison.OrdinalIgnoreCase))
+                {
+                    tags.Add("Behavioral analytics");
+                }
+            }
+
             return tags;
         }
 
@@ -1290,17 +1344,17 @@ namespace PrivacyMonitor
 
         private static double BaselineWeight(TrackerCategory cat) => cat switch
         {
-            TrackerCategory.CMP => 0.2,             // Consent tools are infrastructure, very low risk
+            TrackerCategory.CMP => 0.3,             // Consent tools are infrastructure, but still expose choices
             TrackerCategory.CDN => 0.1,             // CDN is expected
-            TrackerCategory.AdVerification => 0.5,  // Verification is semi-expected
-            TrackerCategory.Affiliate => 0.6,       // Affiliate tracking is common
-            TrackerCategory.Analytics => 0.7,       // Standard analytics — normal web behavior
-            TrackerCategory.Social => 0.8,          // Social widgets carry moderate risk
-            TrackerCategory.Attribution => 0.9,     // Attribution is aggressive mobile tracking
-            TrackerCategory.Advertising => 1.0,     // Full penalty for ad trackers
-            TrackerCategory.SessionReplay => 1.3,   // Session replay is invasive — amplified penalty
-            TrackerCategory.DMP => 1.5,             // Data brokers are highest risk — amplified
-            TrackerCategory.Fingerprinting => 1.4,  // Fingerprinting evades consent — amplified
+            TrackerCategory.AdVerification => 0.6,  // Verification is semi-expected
+            TrackerCategory.Affiliate => 0.7,       // Affiliate tracking is common
+            TrackerCategory.Analytics => 0.8,       // Standard analytics — normal web behavior but still tracking
+            TrackerCategory.Social => 0.9,          // Social widgets carry moderate-to-high risk
+            TrackerCategory.Attribution => 1.0,     // Attribution is aggressive mobile tracking
+            TrackerCategory.Advertising => 1.1,     // Slightly stronger penalty for ad trackers
+            TrackerCategory.SessionReplay => 1.5,   // Session replay is invasive — amplified penalty
+            TrackerCategory.DMP => 1.8,             // Data brokers are highest risk — amplified further
+            TrackerCategory.Fingerprinting => 1.6,  // Fingerprinting evades consent — amplified
             _ => 1.0
         };
 
@@ -1332,7 +1386,7 @@ namespace PrivacyMonitor
             breakdown["Third-party domains"] = -domainPenalty;
 
             // ── Fingerprinting: steep penalty ──
-            int fpPenalty = Math.Min(35, scan.Fingerprints.Count * 10);
+            int fpPenalty = Math.Min(40, scan.Fingerprints.Count * 12);
             score -= fpPenalty; catScores["Fingerprinting"] -= fpPenalty;
             breakdown["Fingerprinting"] = -fpPenalty;
 
@@ -1377,7 +1431,7 @@ namespace PrivacyMonitor
                 f.Type.StartsWith("Behavioral:") || f.Type.Contains("Session Replay") ||
                 f.Type.Contains("Obfuscation") || f.Type.Contains("Dynamic Script") ||
                 f.Type.Contains("Beacon Data") || f.Type.Contains("Cross-Frame"));
-            int behavioralPenalty = Math.Min(25, behavioralCount * 6);
+            int behavioralPenalty = Math.Min(25, behavioralCount * 7);
             score -= behavioralPenalty; catScores["Behavioral"] -= behavioralPenalty;
             if (behavioralPenalty > 0) breakdown["Behavioral tracking"] = -behavioralPenalty;
 
