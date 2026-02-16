@@ -55,14 +55,15 @@ function Deploy-Website {
         return
     }
     # Copy to temp excluding *.zip (saves ~600 MB upload; site only offers EXE)
-    $tempWeb = Join-Path $env:TEMP "vps_website_deploy"
-    if (Test-Path $tempWeb) { Remove-Item $tempWeb -Recurse -Force }
+    $tempWeb = Join-Path $env:TEMP "vps_website_deploy_$(Get-Date -Format 'yyyyMMddHHmmss')"
     New-Item -ItemType Directory -Force $tempWeb | Out-Null
     robocopy "$here\$WebsitePath" $tempWeb /E /XF *.zip /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { Write-Host "Robocopy failed." -ForegroundColor Red; return }
     Write-Host "Uploading website to $VPS_USER@${VPS_HOST}:$REMOTE_BASE/website/ ..." -ForegroundColor Cyan
     scp -r "$tempWeb\*" "${VPS_USER}@${VPS_HOST}:${REMOTE_BASE}/website/"
     Remove-Item $tempWeb -Recurse -Force -ErrorAction SilentlyContinue
+    # Clean old deploy temp folders (ignore errors if EXE is locked)
+    Get-ChildItem $env:TEMP -Directory -Filter "vps_website_deploy_*" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     Write-Host "Website done." -ForegroundColor Green
 }
 
@@ -79,6 +80,9 @@ function Deploy-Server {
     if ($LASTEXITCODE -ge 8) { Write-Host "Robocopy failed." -ForegroundColor Red; return }
     Write-Host "Uploading server to $VPS_USER@${VPS_HOST}:$REMOTE_BASE/server/ ..." -ForegroundColor Cyan
     scp -r "$tempSrv\*" "${VPS_USER}@${VPS_HOST}:${REMOTE_BASE}/server/"
+    if (Test-Path "$here\$ServerPath\env.default") {
+      scp "$here\$ServerPath\env.default" "${VPS_USER}@${VPS_HOST}:${REMOTE_BASE}/server/env.default"
+    }
     Remove-Item $tempSrv -Recurse -Force -ErrorAction SilentlyContinue
     Write-Host "Server done." -ForegroundColor Green
 }

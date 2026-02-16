@@ -47,6 +47,18 @@ body {
   to { opacity: 1; }
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ========== Keyframes ========== */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(24px); }
@@ -655,6 +667,31 @@ img { max-width: 100%; height: auto; display: block; }
   border-left: 4px solid var(--accent, #0ea5e9);
   background: rgba(14, 165, 233, 0.06);
 }
+
+.what-list {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  font-size: 16px;
+}
+.what-list li {
+  margin-bottom: 14px;
+  padding-left: 24px;
+  position: relative;
+}
+.what-list li::before {
+  content: "·";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 20px;
+}
+.what-list strong { color: var(--text-primary); }
+
+.extension-notice .card-panel { border-left: 4px solid var(--accent); }
 
 .verify-panel .code {
   font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;

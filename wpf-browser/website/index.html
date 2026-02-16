@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Privacy Monitor — Know what websites know about you</title>
-  <meta name="description" content="Windows privacy diagnostic browser. Detect trackers, fingerprinting, and export GDPR-style audits. Built with WPF and WebView2.">
+  <meta name="description" content="Privacy Monitor is a Windows diagnostic browser that shows you what websites do: trackers, fingerprinting, data flows. Privacy scores, blocking, and GDPR-ready reports. Extension coming soon.">
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,7 +34,7 @@
         <span class="badge">Windows 10/11</span>
         <span class="badge">Privacy-first</span>
         <h1>Know what websites know about you.</h1>
-        <p>A diagnostic browser that reveals trackers, fingerprinting, and data flows in real time — with privacy scores, blocking, and GDPR-ready reports.</p>
+        <p>Privacy Monitor is a <strong>diagnostic browser</strong> for Windows. It shows you exactly what sites do in the background: who tracks you, how you’re fingerprinted, and where your data goes — with privacy scores, optional blocking, and exportable reports.</p>
         <a class="cta" href="download.html">Download for Windows</a>
         <p class="muted">Self-contained EXE · No .NET required · Free & open source</p>
         <div class="trust-strip">
@@ -55,6 +55,23 @@
 
   <section class="section">
     <div class="container">
+      <h2 class="reveal">What the browser does</h2>
+      <p class="reveal stagger-1">Use Privacy Monitor like a normal browser — but with full visibility and control over privacy.</p>
+      <ul class="what-list reveal stagger-1">
+        <li><strong>Browse</strong> — Chrome-style tabs, address bar, back/forward. Each tab uses Chromium (WebView2).</li>
+        <li><strong>Privacy score</strong> — Every page gets a 0–100 score and letter grade. Fewer trackers and risks mean a higher score.</li>
+        <li><strong>Tracker detection</strong> — See which services load (Google, Meta, analytics, ads). First-party vs third-party, with confidence.</li>
+        <li><strong>Blocking</strong> — Monitor only, block known trackers, or aggressive mode. Per-site. Optional ad/tracker blocking.</li>
+        <li><strong>Anti-fingerprinting</strong> — Optional protection against canvas, WebGL, and device fingerprinting; attempts are reported.</li>
+        <li><strong>Sidebar panels</strong> — Dashboard, Network, Storage, Fingerprint, Security headers, Report (HTML/CSV), Forensics (timeline, data flow).</li>
+        <li><strong>Reports</strong> — Export timestamped HTML and CSV for audits and GDPR-style evidence.</li>
+      </ul>
+      <p class="reveal stagger-2 muted">All analysis runs on your PC. Nothing is sent to our servers.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
       <h2 class="reveal">Key capabilities</h2>
       <p class="reveal stagger-1">Built for researchers, regulators, and anyone who cares about what sites do behind the scenes.</p>
       <div class="features">
@@ -68,31 +85,11 @@
     </div>
   </section>
 
-  <section class="section">
+  <section class="section extension-notice">
     <div class="container">
-      <h2 class="reveal">App UI preview</h2>
-      <p class="reveal stagger-1">Starting page and Dashboard.</p>
-      <div class="carousel-wrap fade-in">
-        <div class="carousel" role="region" aria-label="Screenshots">
-          <div class="carousel-track">
-            <div class="carousel-slide">
-              <img src="assets/screens/starting.png" alt="Starting page" onerror="this.style.display='none'; this.nextElementSibling?.classList.add('visible');">
-              <div class="carousel-placeholder" aria-hidden="true">Starting page</div>
-            </div>
-            <div class="carousel-slide">
-              <img src="assets/screens/dashboard.png" alt="Dashboard panel" onerror="this.style.display='none'; this.nextElementSibling?.classList.add('visible');">
-              <div class="carousel-placeholder" aria-hidden="true">Dashboard panel</div>
-            </div>
-          </div>
-        </div>
-        <div class="carousel-controls">
-          <button type="button" class="carousel-btn" data-carousel-prev aria-label="Previous">← Prev</button>
-          <div class="carousel-dots" role="tablist" aria-label="Slide">
-            <button type="button" class="carousel-dot active" data-carousel-dot="0" aria-label="Slide 1" aria-selected="true"></button>
-            <button type="button" class="carousel-dot" data-carousel-dot="1" aria-label="Slide 2" aria-selected="false"></button>
-          </div>
-          <button type="button" class="carousel-btn" data-carousel-next aria-label="Next">Next →</button>
-        </div>
+      <div class="card-panel reveal">
+        <h3>Browser extension in the works</h3>
+        <p>We are working on a <strong>Chrome extension</strong> that brings the same privacy engine (tracker detection, blocking, optional anti-fingerprinting) into your everyday browsing. Stay tuned — we’ll announce it here and on GitHub when it’s ready.</p>
       </div>
     </div>
   </section>

@@ -7,9 +7,13 @@
  * - Admin: /admin (login), /logs.html (protected), /api/logs (protected)
  */
 
+const path = require('path');
+// Load env.default first (override any systemd env), then .env so VPS can override
+require('dotenv').config({ path: path.join(__dirname, 'env.default'), override: true });
+require('dotenv').config({ override: true });
+
 const crypto = require('crypto');
 const fs = require('fs');
-const path = require('path');
 const express = require('express');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
@@ -49,6 +53,8 @@ const USAGE_LOG_PATH = path.join(LOGS_DIR, 'usage-log.jsonl');
 
 function appendLog(filePath, entry) {
   try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.appendFileSync(filePath, JSON.stringify(entry) + '\n');
   } catch (e) {
     console.error('Log write failed:', e);
@@ -85,8 +91,19 @@ function getLatestVersion() {
 }
 
 app.use(morgan('combined'));
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
+
+// ---------- Rate limit log ingestion (prevent flood) ----------
+const logIngestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  message: { error: 'Too many requests. Try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/install-log', logIngestLimiter);
+app.use('/api/usage', logIngestLimiter);
 
 // ---------- Rate limit login (5 attempts per IP per 15 min) ----------
 const loginLimiter = rateLimit({
@@ -254,12 +271,32 @@ app.get('/api/download/:version?', (req, res) => {
 });
 
 // ---------- API: log who installed / updated the browser ----------
+const ALLOWED_INSTALL_KEYS = ['version', 'platform', 'client', 'clientId'];
+const ALLOWED_USAGE_KEYS = ['version', 'platform', 'client', 'os', 'protectionDefault', 'allowUsageData'];
+const MAX_STRING_LENGTH = 500;
+
+function sanitizeLogBody(body, allowedKeys) {
+  if (!body || typeof body !== 'object') return {};
+  const out = {};
+  for (const key of allowedKeys) {
+    if (Object.prototype.hasOwnProperty.call(body, key)) {
+      const v = body[key];
+      if (v !== null && v !== undefined) {
+        const s = String(v).slice(0, MAX_STRING_LENGTH);
+        out[key] = s;
+      }
+    }
+  }
+  return out;
+}
+
 app.post('/api/install-log', (req, res) => {
+  const safe = sanitizeLogBody(req.body, ALLOWED_INSTALL_KEYS);
   const entry = {
     time: new Date().toISOString(),
-    ip: req.ip || req.connection?.remoteAddress,
-    userAgent: req.get('user-agent') || '',
-    ...req.body,
+    ip: req.ip || req.connection?.remoteAddress || '',
+    userAgent: (req.get('user-agent') || '').slice(0, MAX_STRING_LENGTH),
+    ...safe,
   };
   appendLog(INSTALL_LOG_PATH, entry);
   res.status(204).end();
@@ -267,11 +304,12 @@ app.post('/api/install-log', (req, res) => {
 
 // ---------- API: anonymous usage data (to improve the browser) ----------
 app.post('/api/usage', (req, res) => {
+  const safe = sanitizeLogBody(req.body, ALLOWED_USAGE_KEYS);
   const entry = {
     time: new Date().toISOString(),
-    ip: req.ip || req.connection?.remoteAddress,
-    userAgent: req.get('user-agent') || '',
-    ...req.body,
+    ip: req.ip || req.connection?.remoteAddress || '',
+    userAgent: (req.get('user-agent') || '').slice(0, MAX_STRING_LENGTH),
+    ...safe,
   };
   appendLog(USAGE_LOG_PATH, entry);
   res.status(204).end();
@@ -284,9 +322,36 @@ const LOG_FILES = {
   usage: USAGE_LOG_PATH,
 };
 
+const LOGS_DIR_RESOLVED = path.resolve(LOGS_DIR);
+const MAX_LOG_FILE_BYTES = 5 * 1024 * 1024; // 5MB tail only
+
 function readLogLines(filePath, limit = 200) {
-  if (!fs.existsSync(filePath)) return [];
-  const content = fs.readFileSync(filePath, 'utf8');
+  if (!filePath || typeof filePath !== 'string') return { entries: [], total: 0, lastUpdated: null };
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(LOGS_DIR_RESOLVED) || resolved === LOGS_DIR_RESOLVED) return { entries: [], total: 0, lastUpdated: null };
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return { entries: [], total: 0, lastUpdated: null };
+  let content;
+  let mtimeMs = null;
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const st = fs.fstatSync(fd);
+    mtimeMs = st.mtimeMs;
+    const size = st.size;
+    if (size === 0) {
+      fs.closeSync(fd);
+      return { entries: [], total: 0, lastUpdated: st.mtime ? st.mtime.toISOString() : null };
+    }
+    const toRead = Math.min(size, MAX_LOG_FILE_BYTES);
+    const start = size - toRead;
+    const buffer = Buffer.alloc(toRead);
+    fs.readSync(fd, buffer, 0, toRead, start);
+    fs.closeSync(fd);
+    content = buffer.toString('utf8');
+    if (start > 0) content = content.replace(/^[^\n]*\n/, ''); // drop possibly truncated first line
+  } catch (e) {
+    console.error('Log read failed:', e);
+    return { entries: [], total: 0, lastUpdated: null };
+  }
   const lines = content.trim().split('\n').filter(Boolean);
   const slice = lines.slice(-Math.min(limit, lines.length));
   const out = [];
@@ -295,19 +360,21 @@ function readLogLines(filePath, limit = 200) {
       out.push(JSON.parse(line));
     } catch (e) { /* skip bad lines */ }
   }
-  return out.reverse(); // newest first
+  out.reverse(); // newest first
+  const lastUpdated = mtimeMs != null ? new Date(mtimeMs).toISOString() : null;
+  return { entries: out, total: lines.length, lastUpdated };
 }
 
 app.get('/api/logs', requireAdminSession, (req, res) => {
   const type = (req.query.type || 'download').toLowerCase();
-  const limit = Math.min(500, parseInt(req.query.limit, 10) || 200);
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 200));
   const filePath = LOG_FILES[type];
   if (!filePath) {
     return res.status(400).json({ error: 'Invalid type. Use download, install, or usage.' });
   }
   try {
-    const entries = readLogLines(filePath, limit);
-    res.json({ type, count: entries.length, entries });
+    const { entries, total, lastUpdated } = readLogLines(filePath, limit);
+    res.json({ type, count: entries.length, total, lastUpdated, entries });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
   }

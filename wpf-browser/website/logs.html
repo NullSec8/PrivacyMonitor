@@ -4,71 +4,64 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Logs – Privacy Monitor</title>
-  <link rel="stylesheet" href="assets/styles.css?v=2">
+  <link rel="stylesheet" href="assets/styles.css?v=3">
+  <link rel="icon" href="assets/logo.png">
   <style>
     .logs-page { padding: 24px 0 48px; }
     .logs-page h1 { font-size: 24px; margin-bottom: 8px; }
-    .logs-page .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
-    .log-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-    .log-tabs button {
-      padding: 10px 18px;
-      border: 1px solid var(--border);
-      background: var(--card);
-      color: var(--deep);
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background .15s, border-color .15s;
+    .logs-page .sub { color: var(--text-secondary, #475569); font-size: 14px; margin-bottom: 8px; }
+    .log-meta { font-size: 13px; color: var(--text-tertiary, #64748b); margin-bottom: 16px; }
+    .log-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .log-toolbar .search-wrap { flex: 1; min-width: 180px; }
+    .log-toolbar input[type="search"] {
+      width: 100%; max-width: 280px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-size: 14px; background: var(--bg); color: var(--text-primary);
     }
-    .log-tabs button:hover { background: #EEF2F7; border-color: var(--teal); }
-    .log-tabs button.active { background: var(--teal); color: #fff; border-color: var(--teal); }
+    .log-toolbar input[type="search"]:focus { outline: none; border-color: var(--accent, #0ea5e9); }
+    .log-toolbar select { padding: 8px 10px; border-radius: 8px; font-size: 14px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); }
+    .log-tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .log-tabs button {
+      padding: 10px 18px; border: 1px solid var(--border); background: var(--bg-secondary, #f8fafc);
+      color: var(--text-primary); border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .15s, border-color .15s;
+    }
+    .log-tabs button:hover { background: var(--bg-tertiary, #f1f5f9); border-color: var(--accent); }
+    .log-tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
     .log-table-wrap {
-      overflow-x: auto;
-      background: var(--card);
-      border-radius: 14px;
-      border: 1px solid var(--border);
+      overflow-x: auto; background: var(--bg); border-radius: 14px; border: 1px solid var(--border);
       box-shadow: 0 2px 12px rgba(0,0,0,.04);
     }
-    .log-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
+    .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .log-table th {
-      text-align: left;
-      padding: 14px 16px;
-      background: #F0F4F8;
-      color: var(--muted);
-      font-weight: 600;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: .03em;
+      text-align: left; padding: 12px 14px; background: var(--bg-secondary, #f0f4f8); color: var(--text-secondary);
+      font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap;
+      cursor: pointer; user-select: none;
     }
-    .log-table td { padding: 12px 16px; border-top: 1px solid var(--border); }
-    .log-table tr:hover td { background: #FAFBFC; }
-    .log-table .time { color: var(--muted); white-space: nowrap; }
+    .log-table th:hover { background: var(--bg-tertiary, #e2e8f0); }
+    .log-table th.sorted-asc::after { content: ' \2191'; }
+    .log-table th.sorted-desc::after { content: ' \2193'; }
+    .log-table td { padding: 10px 14px; border-top: 1px solid var(--border); }
+    .log-table tbody tr:hover td { background: var(--bg-secondary, #f8fafc); }
+    .log-table .time { color: var(--text-secondary); white-space: nowrap; }
     .log-table .ip { font-family: ui-monospace, monospace; font-size: 12px; }
-    .log-table .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 500;
-    }
-    .log-table .badge-version { background: #E0F2FE; color: #0369A1; }
-    .log-table .badge-platform { background: #DCFCE7; color: #15803D; }
-    .log-table .ua { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
-    .empty-state { text-align: center; padding: 48px 24px; color: var(--muted); }
+    .log-table .ua { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-size: 12px; }
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--text-secondary); }
     .empty-state p { margin-bottom: 8px; }
-    .refresh { margin-left: auto; }
-    .logs-header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+    .empty-state .hint { font-size: 13px; margin-top: 12px; }
+    .logs-loading { text-align: center; padding: 24px; color: var(--text-secondary); }
+    .logs-error { background: #FEF2F2; color: #B91C1C; padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; font-size: 14px; }
+    .btn-secondary { padding: 8px 14px; border-radius: 8px; font-size: 14px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); cursor: pointer; }
+    .btn-secondary:hover { background: var(--bg-secondary); }
+    .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .auto-refresh-label { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-secondary); }
+    .auto-refresh-label input { width: 18px; height: 18px; }
+    .kbd-hint { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
   </style>
 </head>
 <body>
   <nav class="nav">
     <div class="container nav-inner">
       <div class="brand">
+        <img src="assets/logo.png" alt="" class="brand-img" onerror="this.style.display='none'">
         <span>Privacy Monitor</span>
       </div>
       <div class="nav-links">
@@ -83,13 +76,34 @@
 
   <section class="section logs-page">
     <div class="container">
-      <div class="logs-header">
-        <div>
-          <h1>Collected data</h1>
-          <p class="sub">Downloads, installs/updates, and anonymous usage. Newest first.</p>
-        </div>
-        <button type="button" class="cta refresh" id="refresh">Refresh</button>
+      <div>
+        <h1>Collected data</h1>
+        <p class="sub">Downloads, installs/updates, and anonymous usage. Newest first.</p>
+        <p class="log-meta" id="log-meta" aria-live="polite"></p>
       </div>
+      <div class="logs-error" id="log-error" style="display:none;"></div>
+      <div class="logs-loading" id="log-loading" style="display:none;">Loading…</div>
+
+      <div class="log-toolbar">
+        <div class="search-wrap">
+          <label for="log-search" class="sr-only">Filter rows</label>
+          <input type="search" id="log-search" placeholder="Filter rows…" aria-label="Filter table rows">
+        </div>
+        <label class="auto-refresh-label">
+          <input type="checkbox" id="auto-refresh" aria-label="Auto-refresh every 30 seconds">
+          <span>Auto-refresh (30s)</span>
+        </label>
+        <label for="log-limit">Show</label>
+        <select id="log-limit" aria-label="Number of entries">
+          <option value="50">50</option>
+          <option value="200" selected>200</option>
+          <option value="500">500</option>
+        </select>
+        <span>entries</span>
+        <button type="button" class="btn-secondary" id="refresh">Refresh</button>
+        <button type="button" class="btn-secondary" id="export-csv">Export CSV</button>
+      </div>
+      <p class="kbd-hint">Press <kbd>R</kbd> to refresh, <kbd>Esc</kbd> to clear filter.</p>
 
       <div class="log-tabs">
         <button type="button" class="active" data-type="download">Downloads</button>
@@ -100,20 +114,13 @@
       <div class="log-table-wrap">
         <table class="log-table" id="log-table">
           <thead id="log-thead">
-            <tr>
-              <th>Time</th>
-              <th>IP</th>
-              <th>Version</th>
-              <th>Platform</th>
-              <th>Filename</th>
-              <th>User agent</th>
-            </tr>
+            <tr><th>Time</th><th>IP</th><th>Version</th><th>Platform</th><th>Filename</th><th>User agent</th></tr>
           </thead>
           <tbody id="log-tbody"></tbody>
         </table>
         <div class="empty-state" id="empty-state" style="display:none;">
-          <p>No entries yet.</p>
-          <p>Data appears when someone downloads the app, completes an in-app update, or has usage data enabled.</p>
+          <p id="empty-msg">No entries yet.</p>
+          <p class="hint" id="empty-hint">Data appears when someone downloads the app, completes an in-app update, or has usage data enabled.</p>
         </div>
       </div>
     </div>
@@ -122,9 +129,33 @@
   <script>
     (function() {
       var currentType = 'download';
+      var currentEntries = [];
+      var currentCols = [];
+      var sortKey = 'time';
+      var sortDir = -1;
+      var autoRefreshTimer = null;
       var thead = document.getElementById('log-thead');
       var tbody = document.getElementById('log-tbody');
       var emptyState = document.getElementById('empty-state');
+      var emptyMsg = document.getElementById('empty-msg');
+      var emptyHint = document.getElementById('empty-hint');
+      var logMeta = document.getElementById('log-meta');
+      var logError = document.getElementById('log-error');
+      var logLoading = document.getElementById('log-loading');
+      var refreshBtn = document.getElementById('refresh');
+      var logSearch = document.getElementById('log-search');
+      var logLimit = document.getElementById('log-limit');
+      var exportCsvBtn = document.getElementById('export-csv');
+
+      function escapeHtml(str) {
+        if (str === undefined || str === null) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+      function escapeCsv(val) {
+        var s = String(val == null ? '' : val);
+        if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+        return s;
+      }
 
       var headers = {
         download: [
@@ -155,50 +186,159 @@
 
       function formatTime(iso) {
         if (!iso) return '—';
-        try {
-          var d = new Date(iso);
-          return d.toLocaleString();
-        } catch (e) { return iso; }
+        try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+      }
+      function formatTimeForCsv(iso) {
+        if (!iso) return '';
+        try { return new Date(iso).toISOString(); } catch (e) { return iso; }
+      }
+
+      function getFilteredAndSortedEntries() {
+        var q = (logSearch.value || '').toLowerCase().trim();
+        var list = currentEntries.slice();
+        if (q) {
+          list = list.filter(function(row) {
+            return currentCols.some(function(c) {
+              var v = row[c.key];
+              return v != null && String(v).toLowerCase().indexOf(q) !== -1;
+            });
+          });
+        }
+        list.sort(function(a, b) {
+          var va = a[sortKey]; var vb = b[sortKey];
+          if (va === vb) return 0;
+          if (va == null) return sortDir; if (vb == null) return -sortDir;
+          var cmp = String(va).localeCompare(String(vb), undefined, { numeric: true });
+          return sortDir * (cmp || (va < vb ? -1 : 1));
+        });
+        return list;
       }
 
       function renderHead(type) {
-        var cols = headers[type] || headers.download;
-        thead.innerHTML = '<tr>' + cols.map(function(c) { return '<th>' + c.label + '</th>'; }).join('') + '</tr>';
+        currentCols = headers[type] || headers.download;
+        var html = '<tr>';
+        currentCols.forEach(function(c) {
+          var cls = c.key === sortKey ? (sortDir === 1 ? 'sorted-asc' : 'sorted-desc') : '';
+          html += '<th class="' + cls + '" data-sort="' + escapeHtml(c.key) + '" scope="col">' + escapeHtml(c.label) + '</th>';
+        });
+        html += '</tr>';
+        thead.innerHTML = html;
+        thead.querySelectorAll('th[data-sort]').forEach(function(th) {
+          th.addEventListener('click', function() {
+            var k = th.getAttribute('data-sort');
+            if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = -1; }
+            renderBodyFromCurrent();
+          });
+        });
       }
 
-      function renderBody(type, entries) {
-        var cols = headers[type] || headers.download;
-        if (!entries || entries.length === 0) {
+      function renderBodyFromCurrent() {
+        var list = getFilteredAndSortedEntries();
+        if (list.length === 0) {
           tbody.innerHTML = '';
           emptyState.style.display = 'block';
+          emptyMsg.textContent = currentEntries.length === 0 ? 'No entries yet.' : 'No rows match the filter.';
+          emptyHint.style.display = currentEntries.length === 0 ? 'block' : 'none';
+          logMeta.textContent = (currentEntries.length > 0 ? 'Filtered to 0 of ' + currentEntries.length + '. ' : '') + (logMeta.dataset.baseMeta || '');
           return;
         }
         emptyState.style.display = 'none';
-        tbody.innerHTML = entries.map(function(row) {
-          return '<tr>' + cols.map(function(c) {
-            var val = row[c.key];
-            if (c.key === 'time') val = formatTime(val);
-            if (val === undefined || val === null) val = '—';
-            if (c.key === 'userAgent') return '<td class="ua" title="' + (val || '').replace(/"/g, '&quot;') + '">' + (val || '—') + '</td>';
-            return '<td>' + (val || '—') + '</td>';
+        if (currentEntries.length > 0 && list.length !== currentEntries.length) {
+          logMeta.textContent = 'Showing ' + list.length + ' of ' + currentEntries.length + ' (filtered). ' + (logMeta.dataset.baseMeta || '');
+        }
+        tbody.innerHTML = list.map(function(row) {
+          return '<tr>' + currentCols.map(function(c) {
+            var val = c.key === 'time' ? formatTime(row[c.key]) : (row[c.key] ?? '—');
+            var escaped = escapeHtml(val);
+            if (c.key === 'userAgent') return '<td class="ua" title="' + escaped + '">' + escaped + '</td>';
+            return '<td>' + escaped + '</td>';
           }).join('') + '</tr>';
         }).join('');
       }
 
+      function setMeta(count, total, lastUpdated) {
+        var base = count === 0 ? 'No entries.' : 'Showing ' + count + ' entr' + (count === 1 ? 'y' : 'ies');
+        if (total !== undefined && total > count) base += ' (of ' + total + ' in file)';
+        base += '.';
+        if (lastUpdated) base += ' Last updated: ' + formatTime(lastUpdated) + '.';
+        logMeta.dataset.baseMeta = base;
+        logMeta.textContent = base;
+      }
+
+      function showError(msg) {
+        logError.textContent = msg;
+        logError.style.display = 'block';
+      }
+      function hideError() {
+        logError.style.display = 'none';
+      }
+
       function load(type) {
         currentType = type;
+        currentEntries = [];
+        sortKey = 'time';
+        sortDir = -1;
         renderHead(type);
-        var url = '/api/logs?type=' + encodeURIComponent(type) + '&limit=200';
+        hideError();
+        logLoading.style.display = 'block';
+        refreshBtn.disabled = true;
+        exportCsvBtn.disabled = true;
+        tbody.innerHTML = '';
+        emptyState.style.display = 'none';
+        logMeta.textContent = 'Loading…';
+
+        var limit = parseInt(logLimit.value, 10) || 200;
+        var url = '/api/logs?type=' + encodeURIComponent(type) + '&limit=' + limit;
         fetch(url, { credentials: 'same-origin' })
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            renderBody(type, data.entries || []);
+          .then(function(r) {
+            if (r.status === 401 || r.status === 403) {
+              window.location.href = '/admin?next=' + encodeURIComponent(window.location.pathname);
+              return null;
+            }
+            if (!r.ok) {
+              return r.json().then(function(data) { throw new Error(data.error || 'Request failed'); }, function() { throw new Error('Request failed: ' + r.status); });
+            }
+            return r.json();
           })
-          .catch(function() {
-            renderBody(type, []);
+          .then(function(data) {
+            logLoading.style.display = 'none';
+            refreshBtn.disabled = false;
+            exportCsvBtn.disabled = false;
+            if (!data) return;
+            currentEntries = data.entries || [];
+            setMeta(currentEntries.length, data.total, data.lastUpdated);
+            renderBodyFromCurrent();
+          })
+          .catch(function(err) {
+            logLoading.style.display = 'none';
+            refreshBtn.disabled = false;
+            exportCsvBtn.disabled = false;
+            currentEntries = [];
             emptyState.style.display = 'block';
-            emptyState.querySelector('p').textContent = 'Could not load logs.';
+            emptyMsg.textContent = 'Could not load logs.';
+            emptyHint.style.display = 'block';
+            showError(err.message || 'Could not load logs.');
           });
+      }
+
+      function doExportCsv() {
+        var list = getFilteredAndSortedEntries();
+        if (list.length === 0) return;
+        var cols = currentCols;
+        var header = cols.map(function(c) { return escapeCsv(c.label); }).join(',');
+        var rows = list.map(function(row) {
+          return cols.map(function(c) {
+            var v = c.key === 'time' ? formatTimeForCsv(row[c.key]) : (row[c.key] ?? '');
+            return escapeCsv(v);
+          }).join(',');
+        });
+        var csv = header + '\r\n' + rows.join('\r\n');
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'logs-' + currentType + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
       }
 
       document.querySelectorAll('.log-tabs button').forEach(function(btn) {
@@ -208,13 +348,27 @@
           load(btn.getAttribute('data-type'));
         });
       });
-      document.getElementById('refresh').addEventListener('click', function() { load(currentType); });
-      load('download');
+      refreshBtn.addEventListener('click', function() { load(currentType); });
+      logLimit.addEventListener('change', function() { load(currentType); });
+      logSearch.addEventListener('input', function() { renderBodyFromCurrent(); });
+      logSearch.addEventListener('keydown', function(e) { if (e.key === 'Escape') { logSearch.value = ''; logSearch.focus(); renderBodyFromCurrent(); } });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'r' || e.key === 'R') { if (!e.ctrlKey && !e.metaKey && document.activeElement !== logSearch) { e.preventDefault(); load(currentType); } }
+      });
+      exportCsvBtn.addEventListener('click', doExportCsv);
+
+      document.getElementById('auto-refresh').addEventListener('change', function() {
+        if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+        if (this.checked) autoRefreshTimer = setInterval(function() { load(currentType); }, 30000);
+      });
+
       document.getElementById('logout-link').addEventListener('click', function(ev) {
         ev.preventDefault();
-        fetch('/api/logout', { method: 'POST', credentials: 'same-origin' })
-          .then(function() { window.location.href = '/admin'; });
+        fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).then(function() { window.location.href = '/admin'; });
       });
+
+      load('download');
     })();
   </script>
 </body>
