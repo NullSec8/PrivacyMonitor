@@ -494,7 +494,7 @@
                                     Content="Expert" Click="ToggleExpert_Click" ToolTip="Toggle Expert/Simple view"
                                     Margin="0,0,10,0" Height="28" Padding="14,0" FontSize="11"/>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="Privacy Monitor" FontSize="17" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" FontFamily="Segoe UI"/>
+                                <TextBlock Text="Privacy Monitor" Style="{StaticResource TextTitle}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </DockPanel>
                     </Border>
@@ -513,23 +513,23 @@
                                 <Ellipse x:Name="ScoreRingBase" Stroke="{DynamicResource ScoreRingStroke}" StrokeThickness="10" Fill="Transparent"/>
                                 <Ellipse x:Name="ScoreRing" Stroke="{StaticResource AccentGradient}" StrokeThickness="10" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent"/>
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock x:Name="GradeText" Text="--" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
-                                    <TextBlock Text="Grade" FontSize="10" Foreground="{DynamicResource TextMuted}" HorizontalAlignment="Center" FontFamily="Segoe UI" Margin="0,2,0,0"/>
+                                    <TextBlock x:Name="GradeText" Text="--" Style="{StaticResource TextDisplay}" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Grade" Style="{StaticResource TextCaption}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </Grid>
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <TextBlock x:Name="ScoreNum" Text="-- / 100" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" FontFamily="Segoe UI"/>
-                                <TextBlock x:Name="ScoreSummary" Text="Visit a website to see your privacy score." FontSize="11" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" FontFamily="Segoe UI"/>
-                                <TextBlock x:Name="SimpleSummaryText" Text="" FontSize="10" Foreground="{DynamicResource TextMuted}" TextWrapping="Wrap" Margin="0,4,0,0" FontFamily="Segoe UI" FontStyle="Italic"/>
+                                <TextBlock x:Name="ScoreNum" Text="-- / 100" Style="{StaticResource TextDisplay}"/>
+                                <TextBlock x:Name="ScoreSummary" Text="Visit a website to see your privacy score." Style="{StaticResource TextBody}"/>
+                                <TextBlock x:Name="SimpleSummaryText" Text="" Style="{StaticResource TextCaption}" Margin="0,4,0,0" FontStyle="Italic"/>
                             </StackPanel>
 
                             <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0">
                                 <Border Style="{StaticResource Chip}" Margin="0,0,0,6">
-                                    <TextBlock x:Name="ScoreChip" Text="Privacy Score" FontSize="9" Foreground="{DynamicResource TextSecondary}" FontFamily="Segoe UI"/>
+                                    <TextBlock x:Name="ScoreChip" Text="Privacy Score" Style="{StaticResource TextLabel}"/>
                                 </Border>
                                 <Border Style="{StaticResource Chip}">
-                                    <TextBlock x:Name="TierChip" Text="Analyzing" FontSize="9" Foreground="{DynamicResource TextSecondary}" FontFamily="Segoe UI"/>
+                                    <TextBlock x:Name="TierChip" Text="Analyzing" Style="{StaticResource TextLabel}"/>
                                 </Border>
                             </StackPanel>
                         </Grid>
@@ -545,12 +545,12 @@
 
                     <!-- High-risk warning (shown when grade F or very low score) -->
                     <Border x:Name="HighRiskWarningBorder" DockPanel.Dock="Top" Visibility="Collapsed" Background="{DynamicResource HighRiskWarningBackground}" Padding="16,12" Margin="12,0,12,8" CornerRadius="10" BorderBrush="{DynamicResource HighRiskWarningBorder}" BorderThickness="1">
-                        <TextBlock x:Name="HighRiskWarningText" Text="High risk – consider leaving this site or avoid entering sensitive data." FontSize="12" Foreground="{DynamicResource HighRiskWarningText}" TextWrapping="Wrap" FontFamily="Segoe UI"/>
+                        <TextBlock x:Name="HighRiskWarningText" Text="High risk – consider leaving this site or avoid entering sensitive data." Style="{StaticResource TextBody}" Foreground="{DynamicResource HighRiskWarningText}"/>
                     </Border>
 
                     <!-- Simple: one line. Expert: full grid -->
                     <Border x:Name="SimpleStatsBorder" DockPanel.Dock="Top" Background="{DynamicResource CardBackground}" Padding="16,12" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="0,0,0,1">
-                        <TextBlock x:Name="SimpleStatsText" Text="" FontSize="13" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" FontFamily="Segoe UI" ToolTip="Quick numbers for this page"/>
+                        <TextBlock x:Name="SimpleStatsText" Text="" Style="{StaticResource TextBody}" Foreground="{DynamicResource TextSecondary}" ToolTip="Quick numbers for this page"/>
                     </Border>
                     <Border x:Name="StatsGridBorder" DockPanel.Dock="Top" Background="{DynamicResource CardBackground}" Padding="12,10" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="0,0,0,1" Visibility="Collapsed">
                         <UniformGrid Columns="6">
