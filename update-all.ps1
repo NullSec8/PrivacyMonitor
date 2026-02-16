@@ -10,10 +10,8 @@ Write-Host "=== Restore & build ===" -ForegroundColor Cyan
 $csproj = Join-Path $here "wpf-browser\PrivacyMonitor.csproj"
 if (Test-Path $csproj) {
     Write-Host "Dotnet restore + build: wpf-browser..." -ForegroundColor Yellow
-    Set-Location (Join-Path $here "wpf-browser")
-    dotnet restore
-    dotnet build --no-restore
-    Set-Location $here
+    dotnet restore $csproj
+    dotnet build $csproj --no-restore
     Write-Host "WPF build done." -ForegroundColor Green
 } else {
     Write-Host "PrivacyMonitor.csproj not found, skipping." -ForegroundColor Yellow
