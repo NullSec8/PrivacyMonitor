@@ -79,7 +79,7 @@
 
   fetch('/api/2fa/status', { credentials: 'same-origin' })
     .then(function(r) {
-      if (r.status === 401) { window.location.href = '/admin'; return; }
+      if (r.status === 401 || r.status === 403) { window.location.href = '/admin'; return null; }
       return r.json();
     })
     .then(function(data) {
@@ -96,8 +96,12 @@
 
   function startSetup() {
     fetch('/api/2fa/setup', { credentials: 'same-origin' })
-      .then(function(r) { return r.json(); })
+      .then(function(r) {
+        if (r.status === 401 || r.status === 403) { window.location.href = '/admin'; return null; }
+        return r.json();
+      })
       .then(function(data) {
+        if (!data) return;
         if (data.error) { statusMsg.textContent = data.error; return; }
         document.getElementById('qr-img').src = data.qr;
         document.getElementById('secret-text').textContent = data.secret;
@@ -117,8 +121,12 @@
       credentials: 'same-origin',
       body: JSON.stringify({ code: code })
     })
-      .then(function(r) { return r.json(); })
+      .then(function(r) {
+        if (r.status === 401 || r.status === 403) { window.location.href = '/admin'; return null; }
+        return r.json();
+      })
       .then(function(data) {
+        if (!data) return;
         if (data.error) { errEl.textContent = data.error; return; }
         setupSection.innerHTML = '<p class="success">2FA is now enabled. Next time you log in you will need your password and a code from the app.</p><a href="/logs.html">Back to Logs</a>';
       });
@@ -135,8 +143,12 @@
       credentials: 'same-origin',
       body: JSON.stringify({ code: code })
     })
-      .then(function(r) { return r.json(); })
+      .then(function(r) {
+        if (r.status === 401 || r.status === 403) { window.location.href = '/admin'; return null; }
+        return r.json();
+      })
       .then(function(data) {
+        if (!data) return;
         if (data.error) { errEl.textContent = data.error; return; }
         disableSection.style.display = 'none';
         statusMsg.textContent = '2FA has been disabled.';

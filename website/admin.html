@@ -70,12 +70,12 @@
           <button type="submit">Sign in</button>
         </form>
       </div>
-      <div id="2fa-form-wrap" style="display:none;">
+      <div id="twofa-form-wrap" style="display:none;">
         <p class="sub">Enter the 6-digit code from your authenticator app.</p>
-        <input type="text" id="2fa-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000" style="font-size:18px;letter-spacing:6px;text-align:center;">
-        <div class="error" id="2fa-error"></div>
-        <button type="button" id="2fa-submit">Verify</button>
-        <button type="button" id="2fa-cancel" class="secondary" style="margin-left:8px;background:#94a3b8;color:#fff;">Cancel</button>
+        <input type="text" id="twofa-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000" style="font-size:18px;letter-spacing:6px;text-align:center;">
+        <div class="error" id="twofa-error"></div>
+        <button type="button" id="twofa-submit">Verify</button>
+        <button type="button" id="twofa-cancel" class="secondary" style="margin-left:8px;background:#94a3b8;color:#fff;">Cancel</button>
       </div>
       <p class="back"><a href="index.html">← Back to site</a></p>
       <p class="sub" style="margin-top:16px;font-size:12px;">Optional: after login, enable two-factor authentication (2FA) from the <strong>Setup 2FA</strong> link on the Logs page.</p>
@@ -91,11 +91,10 @@
         errorEl.textContent = 'Admin login is not configured on the server.';
       }
       var loginWrap = document.getElementById('login-form-wrap');
-      var twofaWrap = document.getElementById('2fa-form-wrap');
-      var twofaCode = document.getElementById('2fa-code');
-      var twofaError = document.getElementById('2fa-error');
-      var twofaSubmit = document.getElementById('2fa-submit');
-      var twofaCancel = document.getElementById('2fa-cancel');
+      var twofaCode = document.getElementById('twofa-code');
+      var twofaError = document.getElementById('twofa-error');
+      var twofaSubmit = document.getElementById('twofa-submit');
+      var twofaCancel = document.getElementById('twofa-cancel');
       var currentTempToken = null;
 
       form.addEventListener('submit', function(ev) {
@@ -114,7 +113,8 @@
             if (result.data.require2fa && result.data.tempToken) {
               currentTempToken = result.data.tempToken;
               loginWrap.style.display = 'none';
-              twofaWrap.style.display = 'block';
+              var twofaWrap = document.getElementById('twofa-form-wrap');
+              if (twofaWrap) twofaWrap.style.display = 'block';
               document.getElementById('subtitle').textContent = 'Two-factor authentication required.';
               twofaCode.focus();
               return;
@@ -154,7 +154,8 @@
 
       twofaCancel.onclick = function() {
         currentTempToken = null;
-        twofaWrap.style.display = 'none';
+        var twofaWrap = document.getElementById('twofa-form-wrap');
+        if (twofaWrap) twofaWrap.style.display = 'none';
         loginWrap.style.display = 'block';
         document.getElementById('subtitle').textContent = 'Sign in to view logs and collected data.';
         twofaCode.value = '';

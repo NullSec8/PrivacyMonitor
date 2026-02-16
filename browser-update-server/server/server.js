@@ -90,6 +90,7 @@ function getLatestVersion() {
   }
 }
 
+app.set('trust proxy', 1); // req.ip correct when behind nginx/reverse proxy
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
@@ -114,6 +115,16 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 app.use('/api/login', loginLimiter);
+
+// ---------- Rate limit logs API (prevent enumeration) ----------
+const logsApiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests. Try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/logs', logsApiLimiter);
 
 // ---------- Admin session: signed cookie ----------
 function signSession(payload) {
@@ -407,9 +418,10 @@ app.post('/api/login', async (req, res) => {
     }
     const exp = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
     const token = signSession({ user, exp });
+    const isProduction = process.env.NODE_ENV === 'production';
     res.cookie(ADMIN_COOKIE_NAME, token, {
       httpOnly: true,
-      secure: false,
+      secure: isProduction,
       sameSite: 'lax',
       maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
       path: '/',
@@ -449,9 +461,10 @@ app.post('/api/login/verify-2fa', (req, res) => {
     }
     const exp = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
     const token = signSession({ user: payload.user, exp });
+    const isProduction = process.env.NODE_ENV === 'production';
     res.cookie(ADMIN_COOKIE_NAME, token, {
       httpOnly: true,
-      secure: false,
+      secure: isProduction,
       sameSite: 'lax',
       maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
       path: '/',
@@ -570,7 +583,15 @@ app.get('/health', (req, res) => {
 });
 
 const BIND_ADDRESS = process.env.BIND_ADDRESS || '127.0.0.1';
-app.listen(PORT, BIND_ADDRESS, () => {
-  console.log(`Browser update server listening on ${BIND_ADDRESS}:${PORT}`);
-  console.log(`BUILDS_DIR=${BUILDS_DIR} LOGS_DIR=${LOGS_DIR} WEBSITE_DIR=${WEBSITE_DIR}`);
-});
+if (process.env.PM_TEST !== '1') {
+  app.listen(PORT, BIND_ADDRESS, () => {
+    console.log(`Browser update server listening on ${BIND_ADDRESS}:${PORT}`);
+    console.log(`BUILDS_DIR=${BUILDS_DIR} LOGS_DIR=${LOGS_DIR} WEBSITE_DIR=${WEBSITE_DIR}`);
+  });
+}
+
+// Export selected helpers for tests (does not affect runtime usage)
+module.exports = {
+  sanitizeLogBody,
+  readLogLines,
+};

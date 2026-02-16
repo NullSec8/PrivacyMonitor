@@ -153,6 +153,11 @@
         ]
       };
 
+      function escapeHtml(str) {
+        if (str === undefined || str === null) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
       function formatTime(iso) {
         if (!iso) return '—';
         try {
@@ -179,8 +184,9 @@
             var val = row[c.key];
             if (c.key === 'time') val = formatTime(val);
             if (val === undefined || val === null) val = '—';
-            if (c.key === 'userAgent') return '<td class="ua" title="' + (val || '').replace(/"/g, '&quot;') + '">' + (val || '—') + '</td>';
-            return '<td>' + (val || '—') + '</td>';
+            var escaped = escapeHtml(val);
+            if (c.key === 'userAgent') return '<td class="ua" title="' + escaped + '">' + escaped + '</td>';
+            return '<td>' + escaped + '</td>';
           }).join('') + '</tr>';
         }).join('');
       }
@@ -190,8 +196,12 @@
         renderHead(type);
         var url = '/api/logs?type=' + encodeURIComponent(type) + '&limit=200';
         fetch(url, { credentials: 'same-origin' })
-          .then(function(r) { return r.json(); })
+          .then(function(r) {
+            if (r.status === 401 || r.status === 403) { window.location.href = '/admin'; return null; }
+            return r.json();
+          })
           .then(function(data) {
+            if (!data) return;
             renderBody(type, data.entries || []);
           })
           .catch(function() {

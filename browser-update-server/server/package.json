@@ -4,7 +4,8 @@
   "description": "Hosts browser builds and provides update/install-log API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18"
