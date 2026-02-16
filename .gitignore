@@ -6,20 +6,36 @@
 [Ll]og/
 [Ll]ogs/
 [Oo]ut/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]uild/
+[Pp]ublish/
+
+# Visual Studio
 .vs/
 *.suo
 *.user
 *.userosscache
+*.sln.docstates
+
+# VS Code
 .vscode/*
 !.vscode/tasks.json
 !.vscode/launch.json
+
+# Rider / JetBrains
 .idea/
 *.sln.iml
 
 # NuGet
 *.nupkg
+*.snupkg
 **/packages/
 project.lock.json
+project.fragment.lock.json
 artifacts/
 
 # Node
@@ -44,9 +60,9 @@ browser-update-server/builds/*.zip
 
 # OS
 Thumbs.db
+ehthumbs.db
 .DS_Store
 Desktop.ini
 
 # Optional (uncomment if you don't want to track)
-# site-profiles.json
-# learned-trackers.json
+# site-profiles.json, learned-trackers.json live in %AppData%\PrivacyMonitor

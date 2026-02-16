@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download - Privacy Monitor</title>
+  <meta name="description" content="Download Privacy Monitor for Windows 10/11. Single-file executable, no installer. Ready for any PC.">
+  <link rel="icon" href="assets/logo.png">
+  <link rel="stylesheet" href="assets/styles.css?v=3">
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <div class="brand">
+        <img src="assets/logo.png" alt="Privacy Monitor" class="brand-img" onerror="this.style.display='none'">
+        <span>Privacy Monitor</span>
+      </div>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="features.html">Features</a>
+        <a href="download.html">Download</a>
+        <a href="security.html">Security & Privacy</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="section page-hero download-section">
+    <div class="container">
+      <h1 class="reveal">Download for Windows</h1>
+      <p class="section-desc reveal stagger-1">Single-file app. No installer. Works on any Windows 10/11 (64-bit) PC.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+
+      <div class="download-cards">
+        <div class="download-card primary fade-in stagger-1">
+          <h3>Download latest (ZIP)</h3>
+          <p>EXE + INSTALL.txt. Extract and run PrivacyMonitor.exe. Recommended.</p>
+          <p class="meta" id="zip-meta">—</p>
+          <a class="cta cta-large" href="#" id="zip-link">Download latest</a>
+          <p class="muted small" style="margin-top:8px;">Served from our update server. Version shown below.</p>
+        </div>
+        <div class="download-card fade-in stagger-2">
+          <h3>Direct EXE (if available)</h3>
+          <p>Single executable from this site.</p>
+          <p class="meta" id="exe-meta">—</p>
+          <a class="cta cta-secondary" href="PrivacyMonitor.exe" download="PrivacyMonitor.exe" id="exe-link">Download EXE</a>
+        </div>
+      </div>
+
+      <div class="install-steps card-panel reveal">
+        <h3>Install on any PC</h3>
+        <ol class="steps-list">
+          <li><strong>Download</strong> PrivacyMonitor.exe (or the ZIP) to your computer.</li>
+          <li><strong>Run</strong> PrivacyMonitor.exe. No installer — just double-click. First start may take a few seconds.</li>
+          <li>If Windows shows <strong>“Windows protected your PC”</strong> or <strong>“This app might harm your device”</strong>: the app is not code-signed, so Windows shows this for any unsigned exe. Click <strong>“More info”</strong>, then <strong>“Run anyway”</strong>. You can verify the file with the SHA256 hash below.</li>
+          <li>If you see a message about <strong>WebView2</strong>, install the runtime once (many PCs already have it):<br>
+            <a href="https://go.microsoft.com/fwlink/p/?LinkId=2124703" target="_blank" rel="noopener">Download WebView2 Runtime (Microsoft)</a>
+          </li>
+        </ol>
+        <p class="muted small">Your settings are stored under <code>%LocalAppData%\PrivacyMonitor</code>. The app does not send data to any server.</p>
+      </div>
+
+      <div class="install-steps card-panel reveal">
+        <h3>System requirements</h3>
+        <ul class="steps-list">
+          <li>Windows 10 or 11 (64-bit)</li>
+          <li>WebView2 Runtime (usually pre-installed with Windows or Edge)</li>
+          <li>No .NET or other frameworks required — the EXE is self-contained</li>
+        </ul>
+      </div>
+
+      <div class="install-steps card-panel verify-panel reveal">
+        <h3>Verify download (optional)</h3>
+        <p class="muted small">After downloading, you can check the file hash to ensure it wasn’t modified.</p>
+        <p><strong>SHA256:</strong></p>
+        <div class="code" id="sha256-value">Run publish.ps1 to generate build info.</div>
+        <p class="muted small" style="margin-top:8px;">In PowerShell: <code>Get-FileHash .\PrivacyMonitor.exe -Algorithm SHA256</code></p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer reveal">
+    <div class="container footer-inner">
+      <div class="footer-links">
+        <a href="features.html">Features</a>
+        <a href="security.html">Security & Privacy</a>
+      </div>
+      <div>© 2026 Privacy Monitor</div>
+    </div>
+  </footer>
+
+  <script>
+    (function() {
+      var zipLink = document.getElementById('zip-link');
+      var zipMeta = document.getElementById('zip-meta');
+      var exeMeta = document.getElementById('exe-meta');
+
+      function applyFromApi(info) {
+        if (info && info.version) {
+          zipMeta.textContent = 'Version ' + info.version;
+          zipLink.href = '/api/download/latest?platform=win64';
+          zipLink.download = (info.downloads && info.downloads.win64) ? info.downloads.win64 : 'PrivacyMonitor-win-x64.zip';
+          zipLink.style.display = 'inline-flex';
+        }
+      }
+
+      function applyFromBuildInfo(info) {
+        if (!info) return;
+        if (info.version) exeMeta.textContent = 'Version ' + info.version + (info.sizeMB ? ' · ' + info.sizeMB + ' MB' : '');
+        if (info.sha256) document.getElementById('sha256-value').textContent = info.sha256;
+        if (info.zipName && !zipLink.href) {
+          zipLink.href = info.zipName;
+          zipLink.download = info.zipName;
+          zipLink.style.display = 'inline-flex';
+          zipMeta.textContent = info.zipName + (info.zipSizeMB ? ' · ' + info.zipSizeMB + ' MB' : '');
+        }
+      }
+
+      fetch('/api/latest')
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(info) {
+          applyFromApi(info);
+          return fetch('assets/build-info.json').then(function(r) { return r.ok ? r.json() : null; });
+        })
+        .catch(function() { return null; })
+        .then(function(info) {
+          applyFromBuildInfo(info);
+        });
+    })();
+  </script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

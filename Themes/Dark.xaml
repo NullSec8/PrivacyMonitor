@@ -1,0 +1,58 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Chrome -->
+    <SolidColorBrush x:Key="WindowBackground" Color="#202124"/>
+    <SolidColorBrush x:Key="TabBarBackground" Color="#292A2D"/>
+    <SolidColorBrush x:Key="ChromeIconBrush" Color="#9AA0A6"/>
+    <SolidColorBrush x:Key="ChromeButtonHoverBrush" Color="#3C4043"/>
+    <SolidColorBrush x:Key="ActiveTabBorderBrush" Color="#3C4043"/>
+    <SolidColorBrush x:Key="TabBarBorderBrush" Color="#3C4043"/>
+    <SolidColorBrush x:Key="NavBarBackground" Color="#292A2D"/>
+    <SolidColorBrush x:Key="NavBarBorderBrush" Color="#3C4043"/>
+    <SolidColorBrush x:Key="AddressBarBackground" Color="#35363A"/>
+    <SolidColorBrush x:Key="AddressBarBorderBrush" Color="#5F6368"/>
+    <SolidColorBrush x:Key="StatusBarBackground" Color="#292A2D"/>
+    <SolidColorBrush x:Key="StatusBarBorderBrush" Color="#3C4043"/>
+    <SolidColorBrush x:Key="SidebarBackground" Color="#292A2D"/>
+    <SolidColorBrush x:Key="SidebarBorderBrush" Color="#3C4043"/>
+    <SolidColorBrush x:Key="ContentBackground" Color="#202124"/>
+    <SolidColorBrush x:Key="LoadingBarBackground" Color="#3C4043"/>
+    <SolidColorBrush x:Key="LoadingBarForeground" Color="#5EB8D9"/>
+    <!-- Cards and surfaces -->
+    <SolidColorBrush x:Key="CardBackground" Color="#35363A"/>
+    <SolidColorBrush x:Key="CardBorderBrush" Color="#5F6368"/>
+    <SolidColorBrush x:Key="SidebarHeaderBackground" Color="#35363A"/>
+    <SolidColorBrush x:Key="ScoreBannerBackground" Color="#3C4043"/>
+    <!-- Text -->
+    <SolidColorBrush x:Key="TextPrimary" Color="#E8EAED"/>
+    <SolidColorBrush x:Key="TextSecondary" Color="#9AA0A6"/>
+    <SolidColorBrush x:Key="TextMuted" Color="#80868B"/>
+    <!-- Score banner & chips -->
+    <SolidColorBrush x:Key="ChipBackground" Color="#3C4043"/>
+    <SolidColorBrush x:Key="ScoreRingStroke" Color="#5F6368"/>
+    <SolidColorBrush x:Key="ScoreRingCenterBackground" Color="#35363A"/>
+    <SolidColorBrush x:Key="ScoreBarTrackBrush" Color="#5F6368"/>
+    <SolidColorBrush x:Key="ScoreBarFillBrush" Color="#5EB8D9"/>
+    <SolidColorBrush x:Key="CardSecondaryBackground" Color="#3C4043"/>
+    <!-- Scrollbars -->
+    <SolidColorBrush x:Key="ScrollbarTrack" Color="#3C4043"/>
+    <SolidColorBrush x:Key="ScrollbarThumb" Color="#5F6368"/>
+    <SolidColorBrush x:Key="ScrollbarThumbHover" Color="#80868B"/>
+    <!-- Menu popup -->
+    <SolidColorBrush x:Key="MenuPopupBackground" Color="#35363A"/>
+    <SolidColorBrush x:Key="MenuItemHoverBrush" Color="#4A4B4F"/>
+    <SolidColorBrush x:Key="MenuSeparatorBrush" Color="#5F6368"/>
+    <!-- Semantic colors (theme-aware) -->
+    <SolidColorBrush x:Key="AccentLinkBrush" Color="#5EB8D9"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#34A853"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#F29900"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="#EA4335"/>
+    <SolidColorBrush x:Key="DangerButtonBackground" Color="#5C2B2B"/>
+    <SolidColorBrush x:Key="DangerButtonForeground" Color="#F28B82"/>
+    <SolidColorBrush x:Key="HighRiskWarningBackground" Color="#4A2525"/>
+    <SolidColorBrush x:Key="HighRiskWarningBorder" Color="#EA4335"/>
+    <SolidColorBrush x:Key="HighRiskWarningText" Color="#FEE2E2"/>
+    <SolidColorBrush x:Key="CrashOverlayBackground" Color="#202124"/>
+    <SolidColorBrush x:Key="CrashOverlayTitle" Color="#E8EAED"/>
+    <SolidColorBrush x:Key="CrashOverlaySubtitle" Color="#9AA0A6"/>
+</ResourceDictionary>

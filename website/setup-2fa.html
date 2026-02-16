@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Setup 2FA – Privacy Monitor Admin</title>
+  <link rel="stylesheet" href="assets/styles.css?v=2">
+  <style>
+    .admin-page { min-height: 50vh; padding: 40px 20px; }
+    .admin-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 420px; margin: 0 auto; box-shadow: 0 4px 20px rgba(0,0,0,.06); }
+    .admin-card h1 { font-size: 20px; margin-bottom: 8px; }
+    .admin-card .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+    .admin-card label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+    .admin-card input { width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; font-size: 15px; margin-bottom: 16px; box-sizing: border-box; }
+    .admin-card button { padding: 12px 20px; background: var(--teal); color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .admin-card button.secondary { background: var(--muted); }
+    .admin-card .error { color: #B91C1C; font-size: 13px; margin-top: 12px; }
+    .admin-card .success { color: #15803D; font-size: 13px; margin-top: 12px; }
+    .qr-wrap { text-align: center; margin: 20px 0; }
+    .qr-wrap img { max-width: 220px; height: auto; border: 1px solid var(--border); border-radius: 8px; }
+    .links { margin-top: 20px; font-size: 13px; }
+    .links a { color: var(--teal); }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <div class="brand"><span>Privacy Monitor</span></div>
+      <div class="nav-links"><a href="/logs.html">Logs</a><a href="/admin">Admin</a></div>
+    </div>
+  </nav>
+
+  <section class="section admin-page">
+    <div class="admin-card">
+      <h1 id="title">Two-factor authentication</h1>
+      <p class="sub" id="subtitle">Add an extra layer of security to admin login.</p>
+
+      <div id="status-section">
+        <p id="status-msg">Loading…</p>
+      </div>
+
+      <div id="setup-section" style="display:none;">
+        <p>Scan this QR code with Google Authenticator (or any TOTP app):</p>
+        <div class="qr-wrap"><img id="qr-img" alt="QR code"></div>
+        <p class="sub">Or enter this secret manually: <code id="secret-text"></code></p>
+        <label for="setup-code">Enter the 6-digit code from your app to confirm:</label>
+        <input type="text" id="setup-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000">
+        <div class="error" id="setup-error"></div>
+        <button type="button" id="setup-confirm">Confirm and enable 2FA</button>
+      </div>
+
+      <div id="disable-section" style="display:none;">
+        <p>2FA is enabled. To disable, enter your current 6-digit code:</p>
+        <input type="text" id="disable-code" inputmode="numeric" maxlength="6" placeholder="000000">
+        <div class="error" id="disable-error"></div>
+        <button type="button" id="disable-btn" class="secondary">Disable 2FA</button>
+      </div>
+
+      <div class="links"><a href="/logs.html">← Back to Logs</a></div>
+    </div>
+  </section>
+
+  <script>
+(function() {
+  var statusSection = document.getElementById('status-section');
+  var statusMsg = document.getElementById('status-msg');
+  var setupSection = document.getElementById('setup-section');
+  var disableSection = document.getElementById('disable-section');
+
+  function showStatus(enabled) {
+    if (enabled) {
+      statusMsg.textContent = '2FA is enabled. You can disable it below.';
+      disableSection.style.display = 'block';
+    } else {
+      statusMsg.textContent = '2FA is not enabled. Click below to set it up.';
+      document.getElementById('start-setup').style.display = 'inline-block';
+    }
+  }
+
+  fetch('/api/2fa/status', { credentials: 'same-origin' })
+    .then(function(r) {
+      if (r.status === 401) { window.location.href = '/admin'; return; }
+      return r.json();
+    })
+    .then(function(data) {
+      if (!data) return;
+      if (data.enabled) {
+        statusMsg.textContent = '2FA is enabled. You can disable it below.';
+        disableSection.style.display = 'block';
+      } else {
+        statusMsg.innerHTML = '2FA is not enabled. <button type="button" id="start-setup" style="margin-left:8px;padding:8px 14px;background:var(--teal);color:#fff;border:none;border-radius:8px;cursor:pointer;">Setup 2FA</button>';
+        document.getElementById('start-setup').onclick = startSetup;
+      }
+    })
+    .catch(function() { statusMsg.textContent = 'Could not load status.'; });
+
+  function startSetup() {
+    fetch('/api/2fa/setup', { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { statusMsg.textContent = data.error; return; }
+        document.getElementById('qr-img').src = data.qr;
+        document.getElementById('secret-text').textContent = data.secret;
+        statusSection.style.display = 'none';
+        setupSection.style.display = 'block';
+      });
+  }
+
+  document.getElementById('setup-confirm').onclick = function() {
+    var code = document.getElementById('setup-code').value.trim();
+    var errEl = document.getElementById('setup-error');
+    errEl.textContent = '';
+    if (!code || code.length !== 6) { errEl.textContent = 'Enter the 6-digit code.'; return; }
+    fetch('/api/2fa/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ code: code })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { errEl.textContent = data.error; return; }
+        setupSection.innerHTML = '<p class="success">2FA is now enabled. Next time you log in you will need your password and a code from the app.</p><a href="/logs.html">Back to Logs</a>';
+      });
+  };
+
+  document.getElementById('disable-btn').onclick = function() {
+    var code = document.getElementById('disable-code').value.trim();
+    var errEl = document.getElementById('disable-error');
+    errEl.textContent = '';
+    if (!code) { errEl.textContent = 'Enter your current 6-digit code.'; return; }
+    fetch('/api/2fa/disable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ code: code })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) { errEl.textContent = data.error; return; }
+        disableSection.style.display = 'none';
+        statusMsg.textContent = '2FA has been disabled.';
+        document.getElementById('disable-code').value = '';
+      });
+  };
+})();
+  </script>
+</body>
+</html>

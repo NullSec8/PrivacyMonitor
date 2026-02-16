@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Logs – Privacy Monitor</title>
+  <link rel="stylesheet" href="assets/styles.css?v=2">
+  <style>
+    .logs-page { padding: 24px 0 48px; }
+    .logs-page h1 { font-size: 24px; margin-bottom: 8px; }
+    .logs-page .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+    .log-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .log-tabs button {
+      padding: 10px 18px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--deep);
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .log-tabs button:hover { background: #EEF2F7; border-color: var(--teal); }
+    .log-tabs button.active { background: var(--teal); color: #fff; border-color: var(--teal); }
+    .log-table-wrap {
+      overflow-x: auto;
+      background: var(--card);
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 12px rgba(0,0,0,.04);
+    }
+    .log-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .log-table th {
+      text-align: left;
+      padding: 14px 16px;
+      background: #F0F4F8;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+    .log-table td { padding: 12px 16px; border-top: 1px solid var(--border); }
+    .log-table tr:hover td { background: #FAFBFC; }
+    .log-table .time { color: var(--muted); white-space: nowrap; }
+    .log-table .ip { font-family: ui-monospace, monospace; font-size: 12px; }
+    .log-table .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .log-table .badge-version { background: #E0F2FE; color: #0369A1; }
+    .log-table .badge-platform { background: #DCFCE7; color: #15803D; }
+    .log-table .ua { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--muted); }
+    .empty-state p { margin-bottom: 8px; }
+    .refresh { margin-left: auto; }
+    .logs-header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <div class="brand">
+        <span>Privacy Monitor</span>
+      </div>
+      <div class="nav-links">
+        <a href="index.html">Home</a>
+        <a href="download.html">Download</a>
+        <a href="/setup-2fa.html">Setup 2FA</a>
+        <a href="/admin">Admin</a>
+        <a href="#" id="logout-link">Log out</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="section logs-page">
+    <div class="container">
+      <div class="logs-header">
+        <div>
+          <h1>Collected data</h1>
+          <p class="sub">Downloads, installs/updates, and anonymous usage. Newest first.</p>
+        </div>
+        <button type="button" class="cta refresh" id="refresh">Refresh</button>
+      </div>
+
+      <div class="log-tabs">
+        <button type="button" class="active" data-type="download">Downloads</button>
+        <button type="button" data-type="install">Installs / updates</button>
+        <button type="button" data-type="usage">Usage (anonymous)</button>
+      </div>
+
+      <div class="log-table-wrap">
+        <table class="log-table" id="log-table">
+          <thead id="log-thead">
+            <tr>
+              <th>Time</th>
+              <th>IP</th>
+              <th>Version</th>
+              <th>Platform</th>
+              <th>Filename</th>
+              <th>User agent</th>
+            </tr>
+          </thead>
+          <tbody id="log-tbody"></tbody>
+        </table>
+        <div class="empty-state" id="empty-state" style="display:none;">
+          <p>No entries yet.</p>
+          <p>Data appears when someone downloads the app, completes an in-app update, or has usage data enabled.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function() {
+      var currentType = 'download';
+      var thead = document.getElementById('log-thead');
+      var tbody = document.getElementById('log-tbody');
+      var emptyState = document.getElementById('empty-state');
+
+      var headers = {
+        download: [
+          { key: 'time', label: 'Time' },
+          { key: 'ip', label: 'IP' },
+          { key: 'version', label: 'Version' },
+          { key: 'platform', label: 'Platform' },
+          { key: 'filename', label: 'Filename' },
+          { key: 'userAgent', label: 'User agent' }
+        ],
+        install: [
+          { key: 'time', label: 'Time' },
+          { key: 'ip', label: 'IP' },
+          { key: 'version', label: 'Version' },
+          { key: 'platform', label: 'Platform' },
+          { key: 'client', label: 'Client' },
+          { key: 'userAgent', label: 'User agent' }
+        ],
+        usage: [
+          { key: 'time', label: 'Time' },
+          { key: 'ip', label: 'IP' },
+          { key: 'version', label: 'Version' },
+          { key: 'os', label: 'OS' },
+          { key: 'protectionDefault', label: 'Protection' },
+          { key: 'platform', label: 'Platform' }
+        ]
+      };
+
+      function formatTime(iso) {
+        if (!iso) return '—';
+        try {
+          var d = new Date(iso);
+          return d.toLocaleString();
+        } catch (e) { return iso; }
+      }
+
+      function renderHead(type) {
+        var cols = headers[type] || headers.download;
+        thead.innerHTML = '<tr>' + cols.map(function(c) { return '<th>' + c.label + '</th>'; }).join('') + '</tr>';
+      }
+
+      function renderBody(type, entries) {
+        var cols = headers[type] || headers.download;
+        if (!entries || entries.length === 0) {
+          tbody.innerHTML = '';
+          emptyState.style.display = 'block';
+          return;
+        }
+        emptyState.style.display = 'none';
+        tbody.innerHTML = entries.map(function(row) {
+          return '<tr>' + cols.map(function(c) {
+            var val = row[c.key];
+            if (c.key === 'time') val = formatTime(val);
+            if (val === undefined || val === null) val = '—';
+            if (c.key === 'userAgent') return '<td class="ua" title="' + (val || '').replace(/"/g, '&quot;') + '">' + (val || '—') + '</td>';
+            return '<td>' + (val || '—') + '</td>';
+          }).join('') + '</tr>';
+        }).join('');
+      }
+
+      function load(type) {
+        currentType = type;
+        renderHead(type);
+        var url = '/api/logs?type=' + encodeURIComponent(type) + '&limit=200';
+        fetch(url, { credentials: 'same-origin' })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            renderBody(type, data.entries || []);
+          })
+          .catch(function() {
+            renderBody(type, []);
+            emptyState.style.display = 'block';
+            emptyState.querySelector('p').textContent = 'Could not load logs.';
+          });
+      }
+
+      document.querySelectorAll('.log-tabs button').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.log-tabs button').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          load(btn.getAttribute('data-type'));
+        });
+      });
+      document.getElementById('refresh').addEventListener('click', function() { load(currentType); });
+      load('download');
+      document.getElementById('logout-link').addEventListener('click', function(ev) {
+        ev.preventDefault();
+        fetch('/api/logout', { method: 'POST', credentials: 'same-origin' })
+          .then(function() { window.location.href = '/admin'; });
+      });
+    })();
+  </script>
+</body>
+</html>

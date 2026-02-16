@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin login – Privacy Monitor</title>
+  <link rel="stylesheet" href="assets/styles.css?v=2">
+  <style>
+    .admin-page { min-height: 60vh; display: flex; align-items: center; justify-content: center; padding: 40px 20px; }
+    .admin-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 380px;
+      width: 100%;
+      box-shadow: 0 4px 20px rgba(0,0,0,.06);
+    }
+    .admin-card h1 { font-size: 22px; margin-bottom: 8px; }
+    .admin-card .sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+    .admin-card label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--deep); }
+    .admin-card input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 15px;
+      margin-bottom: 18px;
+      box-sizing: border-box;
+    }
+    .admin-card input:focus { outline: none; border-color: var(--teal); }
+    .admin-card button {
+      width: 100%;
+      padding: 12px;
+      background: var(--teal);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .admin-card button:hover { opacity: 0.92; }
+    .admin-card button.secondary { background: #94a3b8; }
+    .admin-card .error { color: #B91C1C; font-size: 13px; margin-top: 12px; }
+    .admin-card .back { margin-top: 20px; text-align: center; }
+    .admin-card .back a { color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <div class="brand"><span>Privacy Monitor</span></div>
+      <div class="nav-links"><a href="index.html">Home</a><a href="download.html">Download</a></div>
+    </div>
+  </nav>
+
+  <section class="section admin-page">
+    <div class="admin-card">
+      <h1>Admin login</h1>
+      <p class="sub" id="subtitle">Sign in to view logs and collected data.</p>
+      <div id="login-form-wrap">
+        <form id="login-form" method="post" action="/api/login">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required autocomplete="username" autofocus>
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+          <div class="error" id="error" role="alert"></div>
+          <button type="submit">Sign in</button>
+        </form>
+      </div>
+      <div id="2fa-form-wrap" style="display:none;">
+        <p class="sub">Enter the 6-digit code from your authenticator app.</p>
+        <input type="text" id="2fa-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000" style="font-size:18px;letter-spacing:6px;text-align:center;">
+        <div class="error" id="2fa-error"></div>
+        <button type="button" id="2fa-submit">Verify</button>
+        <button type="button" id="2fa-cancel" class="secondary" style="margin-left:8px;background:#94a3b8;color:#fff;">Cancel</button>
+      </div>
+      <p class="back"><a href="index.html">← Back to site</a></p>
+      <p class="sub" style="margin-top:16px;font-size:12px;">Optional: after login, enable two-factor authentication (2FA) from the <strong>Setup 2FA</strong> link on the Logs page.</p>
+    </div>
+  </section>
+
+  <script>
+    (function() {
+      var form = document.getElementById('login-form');
+      var errorEl = document.getElementById('error');
+      var params = new URLSearchParams(window.location.search);
+      if (params.get('error') === 'config') {
+        errorEl.textContent = 'Admin login is not configured on the server.';
+      }
+      var loginWrap = document.getElementById('login-form-wrap');
+      var twofaWrap = document.getElementById('2fa-form-wrap');
+      var twofaCode = document.getElementById('2fa-code');
+      var twofaError = document.getElementById('2fa-error');
+      var twofaSubmit = document.getElementById('2fa-submit');
+      var twofaCancel = document.getElementById('2fa-cancel');
+      var currentTempToken = null;
+
+      form.addEventListener('submit', function(ev) {
+        ev.preventDefault();
+        errorEl.textContent = '';
+        var username = document.getElementById('username').value.trim();
+        var password = document.getElementById('password').value;
+        fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username, password: password }),
+          credentials: 'same-origin'
+        })
+          .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+          .then(function(result) {
+            if (result.data.require2fa && result.data.tempToken) {
+              currentTempToken = result.data.tempToken;
+              loginWrap.style.display = 'none';
+              twofaWrap.style.display = 'block';
+              document.getElementById('subtitle').textContent = 'Two-factor authentication required.';
+              twofaCode.focus();
+              return;
+            }
+            if (result.ok) {
+              window.location.href = '/logs.html';
+              return;
+            }
+            errorEl.textContent = result.data.error || 'Login failed.';
+          })
+          .catch(function() {
+            errorEl.textContent = 'Network error. Try again.';
+          });
+      });
+
+      twofaSubmit.onclick = function() {
+        twofaError.textContent = '';
+        var code = twofaCode.value.trim();
+        if (!code || code.length !== 6) { twofaError.textContent = 'Enter the 6-digit code.'; return; }
+        if (!currentTempToken) { twofaError.textContent = 'Session expired. Log in again.'; return; }
+        fetch('/api/login/verify-2fa', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tempToken: currentTempToken, code: code }),
+          credentials: 'same-origin'
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.ok) {
+              window.location.href = '/logs.html';
+              return;
+            }
+            twofaError.textContent = data.error || 'Invalid code.';
+          })
+          .catch(function() { twofaError.textContent = 'Network error.'; });
+      };
+
+      twofaCancel.onclick = function() {
+        currentTempToken = null;
+        twofaWrap.style.display = 'none';
+        loginWrap.style.display = 'block';
+        document.getElementById('subtitle').textContent = 'Sign in to view logs and collected data.';
+        twofaCode.value = '';
+        twofaError.textContent = '';
+      };
+    })();
+  </script>
+</body>
+</html>

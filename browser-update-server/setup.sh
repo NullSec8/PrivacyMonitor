@@ -84,7 +84,7 @@ Environment=BUILDS_DIR=${BUILDS_DIR}
 Environment=LOGS_DIR=${LOGS_DIR}
 Environment=WEBSITE_DIR=${WEBSITE_DIR}
 Environment=PORT=3000
-Environment=BIND_ADDRESS=0.0.0.0
+Environment=BIND_ADDRESS=127.0.0.1
 Environment=ADMIN_USERNAME=admin
 Environment=ADMIN_PASSWORD=
 Environment=SESSION_SECRET=
