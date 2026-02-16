@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Privacy Monitor",
+  "version": "1.0.8",
+  "description": "Block trackers and ads. Privacy-first: no telemetry, data stays local.",
+  "permissions": [
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess",
+    "storage",
+    "scripting",
+    "activeTab",
+    "tabs",
+    "permissions"
+  ],
+  "host_permissions": ["https://api.ipify.org/"],
+  "declarative_net_request": {
+    "rule_resources": [
+      { "id": "blocklist", "enabled": true, "path": "rules.json" },
+      { "id": "stealth", "enabled": true, "path": "rules-stealth.json" },
+      { "id": "videoads", "enabled": true, "path": "rules-video-ads.json" }
+    ]
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["ad-shield.js", "navigation-guard.js", "click-guard.js", "ad-defuser.js", "cosmetic.js", "preroll-skip.js", "preroll-detector.js", "redirect-blocker.js"],
+    "run_at": "document_start",
+    "all_frames": false
+  }],
+  "web_accessible_resources": [{
+    "resources": ["cosmetic.css", "ad-defuser-page.js", "click-guard-page.js", "navigation-guard-page.js", "ad-shield-page.js"],
+    "matches": ["<all_urls>"]
+  }],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Privacy Monitor" },
+  "options_page": "options.html"
+}

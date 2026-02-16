@@ -1,0 +1,52 @@
+# Build / IDE
+[Dd]ebug/
+[Rr]elease/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+[Oo]ut/
+.vs/
+*.suo
+*.user
+*.userosscache
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.sln.iml
+
+# NuGet
+*.nupkg
+**/packages/
+project.lock.json
+artifacts/
+
+# Node
+**/node_modules/
+
+# Chrome extension
+**/_metadata/
+**/*.zip
+*.crx
+*.pem
+
+# PrivacyMonitor / WPF
+WebView2Runtime.zip
+wpf-browser/website/*.exe
+wpf-browser/website/*.zip
+
+# Browser update server
+browser-update-server/server/node_modules/
+browser-update-server/logs/
+browser-update-server/data/
+browser-update-server/builds/*.zip
+
+# OS
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# Optional (uncomment if you don't want to track)
+# site-profiles.json
+# learned-trackers.json

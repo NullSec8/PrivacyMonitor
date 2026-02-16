@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Capture fingerprint artifacts (Chrome)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 1rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.2rem; }
+    section { margin: 1rem 0; }
+    button { margin-right: 0.5rem; margin-bottom: 0.5rem; }
+    textarea { width: 100%; height: 200px; font-size: 11px; }
+    .out { margin-top: 0.5rem; }
+    .warn { background: #fff3cd; padding: 0.5rem; border-radius: 4px; margin: 0.5rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Capture fingerprint artifacts (run in Chrome Stable, Windows)</h1>
+  <p class="warn">Use a <strong>clean Chrome</strong> (no extensions, default settings). Save the JSON as <code>fingerprint-artifacts.json</code> in <code>%AppData%\PrivacyMonitor\</code>.</p>
+
+  <section>
+    <h2>Canvas</h2>
+    <p>Draws EFF/BrowserLeaks-style text and shapes, then exports ImageData (RGBA) as base64.</p>
+    <button id="btnCanvas">Capture canvas</button>
+    <div id="canvasStatus" class="out"></div>
+  </section>
+
+  <section>
+    <h2>WebGL</h2>
+    <p>Creates a small context, draws a typical FP quad, readPixels, exports params + extensions + buffer.</p>
+    <button id="btnWebGL">Capture WebGL</button>
+    <div id="webglStatus" class="out"></div>
+  </section>
+
+  <section>
+    <h2>Audio (optional)</h2>
+    <p>OfflineAudioContext, getChannelData for length 4096.</p>
+    <button id="btnAudio">Capture audio</button>
+    <div id="audioStatus" class="out"></div>
+  </section>
+
+  <section>
+    <h2>Export JSON</h2>
+    <button id="btnExport">Build and copy JSON</button>
+    <div id="exportStatus" class="out"></div>
+    <textarea id="jsonOut" placeholder="Full artifact JSON will appear here after capture + export."></textarea>
+  </section>
+
+  <script>
+(function() {
+  const out = {
+    version: 1,
+    source: 'Chrome Stable Windows, no extensions',
+    canvas: {},
+    webgl: {},
+    audio: {}
+  };
+
+  function b64FromU8(u8) {
+    let binary = '';
+    for (let i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]);
+    return btoa(binary);
+  }
+
+  function b64FromF32(f32) {
+    const u8 = new Uint8Array(f32.buffer);
+    let binary = '';
+    for (let i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]);
+    return btoa(binary);
+  }
+
+  // ── Canvas: same text/shapes as EFF/BrowserLeaks ──
+  document.getElementById('btnCanvas').onclick = function() {
+    const sizes = [[220, 30], [115, 30], [16, 16]];
+    const status = document.getElementById('canvasStatus');
+    try {
+      for (const [w, h] of sizes) {
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext('2d');
+        if (!ctx) { status.textContent = 'No 2d context'; return; }
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = '#f60';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#069';
+        ctx.font = '11pt Arial';
+        ctx.fillText('Cwm fjordbank glyphs vext quiz, 😀', 2, 15);
+        ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+        ctx.fillText('Cwm fjordbank glyphs vext quiz, 😀', 4, 17);
+        const img = ctx.getImageData(0, 0, w, h);
+        out.canvas[w + 'x' + h] = b64FromU8(img.data);
+      }
+      status.textContent = 'Captured: ' + Object.keys(out.canvas).join(', ');
+    } catch (e) {
+      status.textContent = 'Error: ' + e.message;
+    }
+  };
+
+  // ── WebGL: small scene + readPixels + params + extensions ──
+  document.getElementById('btnWebGL').onclick = function() {
+    const status = document.getElementById('webglStatus');
+    try {
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 256;
+      const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+      if (!gl) { status.textContent = 'No WebGL'; return; }
+      const w = 256, h = 256;
+      gl.viewport(0, 0, w, h);
+      const vs = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vs, 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}');
+      gl.compileShader(vs);
+      const fs = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fs, 'precision mediump float;void main(){gl_FragColor=vec4(0.1,0.2,0.3,0.4);}');
+      gl.compileShader(fs);
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vs);
+      gl.attachShader(prog, fs);
+      gl.linkProgram(prog);
+      gl.useProgram(prog);
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+      const loc = gl.getAttribLocation(prog, 'p');
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      const pixels = new Uint8Array(w * h * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      out.webgl[w + 'x' + h] = b64FromU8(pixels);
+      const params = {};
+      const enums = [
+        [0x9245, 'UNMASKED_VENDOR_WEBGL'],
+        [0x9246, 'UNMASKED_RENDERER_WEBGL'],
+        [0x0D33, 'MAX_TEXTURE_SIZE'],
+        [0x84E8, 'MAX_RENDERBUFFER_SIZE'],
+        [0x0D3A, 'MAX_VIEWPORT_DIMS'],
+        [0x8869, 'MAX_VERTEX_ATTRIBS'],
+        [0x8DFB, 'MAX_VERTEX_UNIFORM_VECTORS'],
+        [0x8DFC, 'MAX_VARYING_VECTORS'],
+        [0x8B4D, 'MAX_COMBINED_TEXTURE_IMAGE_UNITS'],
+        [0x846E, 'ALIASED_LINE_WIDTH_RANGE'],
+        [0x846D, 'ALIASED_POINT_SIZE_RANGE']
+      ];
+      for (const [e, name] of enums) {
+        try {
+          const v = gl.getParameter(e);
+          if (v !== null && v !== undefined) params['0x' + e.toString(16).toUpperCase()] = v;
+        } catch (err) {}
+      }
+      out.webgl.params = params;
+      out.webgl.extensions = gl.getSupportedExtensions() || [];
+      status.textContent = 'Captured: 256x256, ' + out.webgl.extensions.length + ' extensions';
+    } catch (e) {
+      status.textContent = 'Error: ' + e.message;
+    }
+  };
+
+  document.getElementById('btnAudio').onclick = function() {
+    const status = document.getElementById('audioStatus');
+    try {
+      const C = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      if (!C) { status.textContent = 'No OfflineAudioContext'; return; }
+      const ctx = new C(1, 4096, 44100);
+      const buf = ctx.createBuffer(1, 4096, 44100);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < ch.length; i++) ch[i] = 0;
+      out.audio['4096'] = b64FromF32(ch);
+      status.textContent = 'Captured: 4096';
+    } catch (e) {
+      status.textContent = 'Error: ' + e.message;
+    }
+  };
+
+  document.getElementById('btnExport').onclick = function() {
+    const ta = document.getElementById('jsonOut');
+    const status = document.getElementById('exportStatus');
+    try {
+      const json = JSON.stringify(out, null, 2);
+      ta.value = json;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(json).then(function() {
+          status.textContent = 'JSON built and copied to clipboard. Save as fingerprint-artifacts.json in %AppData%\\PrivacyMonitor\\';
+        }).catch(function() { status.textContent = 'JSON built (copy manually)'; });
+      } else {
+        status.textContent = 'JSON built. Copy from textarea and save as fingerprint-artifacts.json';
+      }
+    } catch (e) {
+      status.textContent = 'Error: ' + e.message;
+    }
+  };
+})();
+  </script>
+</body>
+</html>

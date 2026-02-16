@@ -1,0 +1,7 @@
+# Dependencies
+server/node_modules/
+
+# Runtime (created on server)
+server/../logs/
+server/../data/
+builds/*.zip
