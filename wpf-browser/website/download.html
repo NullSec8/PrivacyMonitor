@@ -48,15 +48,23 @@
         </div>
       </div>
 
+      <div class="install-steps card-panel reveal unblock-callout">
+        <h3>If the app doesn’t open after download</h3>
+        <p>Windows often blocks unsigned programs downloaded from the web. Do this <strong>before</strong> running the EXE:</p>
+        <ol class="steps-list">
+          <li><strong>Unblock the file:</strong> Right-click <code>PrivacyMonitor.exe</code> → <strong>Properties</strong> → at the bottom, check <strong>"Unblock"</strong> → <strong>OK</strong>.</li>
+          <li>Double-click to run. If Windows shows <strong>"Windows protected your PC"</strong>, click <strong>"More info"</strong> → <strong>"Run anyway"</strong>.</li>
+          <li>If you see a message about <strong>WebView2</strong>, install it once: <a href="https://go.microsoft.com/fwlink/p/?LinkId=2124703" target="_blank" rel="noopener">Download WebView2 (Microsoft)</a>.</li>
+          <li>If nothing happens at all: open <strong>Command Prompt</strong>, run <code>cd /d "C:\Users\YourName\Downloads"</code> (or the folder where the EXE is), then <code>PrivacyMonitor.exe</code>. Any error will appear in the window.</li>
+        </ol>
+      </div>
+
       <div class="install-steps card-panel reveal">
         <h3>Install on any PC</h3>
         <ol class="steps-list">
           <li><strong>Download</strong> PrivacyMonitor.exe to your computer.</li>
-          <li><strong>Run</strong> PrivacyMonitor.exe. No installer — just double-click. First start may take a few seconds.</li>
-          <li>If Windows shows <strong>"Windows protected your PC"</strong> or <strong>"This app might harm your device"</strong>: the app is not code-signed, so Windows shows this for any unsigned exe. Click <strong>"More info"</strong>, then <strong>"Run anyway"</strong>. You can verify the file with the SHA256 hash below.</li>
-          <li>If you see a message about <strong>WebView2</strong>, install the runtime once (many PCs already have it):<br>
-            <a href="https://go.microsoft.com/fwlink/p/?LinkId=2124703" target="_blank" rel="noopener">Download WebView2 Runtime (Microsoft)</a>
-          </li>
+          <li><strong>Unblock</strong> the file (Right-click → Properties → check "Unblock" → OK).</li>
+          <li><strong>Run</strong> PrivacyMonitor.exe. First start may take a few seconds.</li>
         </ol>
         <p class="muted small">Your settings are stored under <code>%LocalAppData%\PrivacyMonitor</code>. The app does not send data to any server.</p>
       </div>

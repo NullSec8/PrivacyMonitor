@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace PrivacyMonitor;
 
@@ -10,9 +11,54 @@ public partial class App : Application
 {
     private ResourceDictionary? _themeDictionary;
 
+    public App()
+    {
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+    }
+
+    private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        ReportError("Privacy Monitor encountered an error.", e.Exception);
+        e.Handled = true;
+    }
+
+    private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        ReportError("Privacy Monitor encountered a fatal error.", (Exception)e.ExceptionObject);
+    }
+
+    private static void ReportError(string title, Exception ex)
+    {
+        string message = ex?.ToString() ?? "Unknown error";
+        try
+        {
+            string logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PrivacyMonitor");
+            Directory.CreateDirectory(logDir);
+            string logPath = Path.Combine(logDir, "error.log");
+            File.AppendAllText(logPath, $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}Z] {title}\r\n{message}\r\n\r\n", System.Text.Encoding.UTF8);
+        }
+        catch { }
+        MessageBox.Show($"{title}\r\n\r\n{ex?.Message}\r\n\r\nDetails written to %LocalAppData%\\PrivacyMonitor\\error.log", "Privacy Monitor", MessageBoxButton.OK, MessageBoxImage.Error);
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        try
+        {
+            OnStartupCore(e);
+        }
+        catch (Exception ex)
+        {
+            ReportError("Privacy Monitor could not start.", ex);
+            Shutdown(1);
+        }
+    }
+
+    private void OnStartupCore(StartupEventArgs e)
+    {
 
         // Export blocklist for Chrome extension (same engine as browser). Run: PrivacyMonitor.exe --export-blocklist
         if (e.Args.Contains("--export-blocklist", StringComparer.OrdinalIgnoreCase))
@@ -82,6 +128,13 @@ public partial class App : Application
 
         // Check for updates in the background (non-blocking).
         _ = CheckForUpdatesAsync();
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        DispatcherUnhandledException -= OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
+        base.OnExit(e);
     }
 
     private static async System.Threading.Tasks.Task CheckForUpdatesAsync()

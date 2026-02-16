@@ -466,6 +466,19 @@ app.get('/setup-2fa.html', requireAdminSessionOrRedirect, (req, res) => {
 // ---------- Optional: serve builds as static (use with care; prefer /api/download) ----------
 app.use('/builds', express.static(BUILDS_DIR, { index: false }));
 
+// ---------- Serve EXE with correct headers (no compression, force download) ----------
+// Ensures the browser gets a runnable file. If nginx sits in front, disable gzip for .exe (e.g. location ~* \.exe$ { gzip off; ... }).
+app.get('/PrivacyMonitor.exe', (req, res) => {
+  const exePath = path.join(WEBSITE_DIR, 'PrivacyMonitor.exe');
+  if (!fs.existsSync(exePath)) return res.status(404).send('Not found');
+  res.set({
+    'Content-Type': 'application/octet-stream',
+    'Content-Disposition': 'attachment; filename="PrivacyMonitor.exe"',
+    'Cache-Control': 'no-transform, public, max-age=3600',
+  });
+  res.sendFile(exePath, { acceptRanges: true });
+});
+
 // ---------- Website (index, download, features, security, assets) ----------
 // Never serve admin-only pages as static; only the protected routes above may serve them.
 const PROTECTED_PATHS = ['/logs.html', '/setup-2fa.html'];

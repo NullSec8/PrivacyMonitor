@@ -651,6 +651,11 @@ img { max-width: 100%; height: auto; display: block; }
 
 .install-steps .steps-list li { margin-bottom: 10px; }
 
+.unblock-callout {
+  border-left: 4px solid var(--accent, #0ea5e9);
+  background: rgba(14, 165, 233, 0.06);
+}
+
 .verify-panel .code {
   font-family: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
   font-size: 12px;
