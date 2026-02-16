@@ -66,7 +66,7 @@ wpf-browser/
 | Logs          | `logs/` (download-log.jsonl, install-log.jsonl, usage-log.jsonl) |
 | Admin data    | `data/` (2FA secret, etc.) |
 | Nginx         | Proxies 80 → 127.0.0.1:3000 (and optionally `/app/` → 8080) |
-| SSH           | `root@187.77.71.151` |
+| SSH           | `endri@187.77.71.151` |
 
 ---
 
@@ -78,7 +78,7 @@ wpf-browser/
 | Download          | http://187.77.71.151/download.html |
 | Admin login       | http://187.77.71.151/admin |
 | Logs (after login)| http://187.77.71.151/logs.html |
-| Restart Node      | `ssh root@187.77.71.151 "systemctl restart browser-update-server"` |
+| Restart Node      | `ssh endri@187.77.71.151 "sudo systemctl restart browser-update-server"` |
 
 ---
 
@@ -86,7 +86,7 @@ wpf-browser/
 
 ### Security
 
-- [ ] **HTTPS** – Certbot (e.g. DuckDNS + Let’s Encrypt). Then set `UpdateService.BaseUrl` to `https://...`.
+- [ ] **HTTPS** – Certbot (e.g. DuckDNS + Let’s Encrypt). Then set update server URL in `%LocalAppData%\PrivacyMonitor\update-server.txt` (one line: `https://yourdomain.com:3000`) or in code.
 - [ ] **Strong passwords** – Change admin and (if used) Guacamole defaults. Keep secrets in env.
 
 ### Website

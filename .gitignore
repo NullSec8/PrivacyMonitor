@@ -53,6 +53,7 @@ wpf-browser/website/*.exe
 wpf-browser/website/*.zip
 
 # Browser update server
+browser-update-server/server/.env
 browser-update-server/server/node_modules/
 browser-update-server/logs/
 browser-update-server/data/

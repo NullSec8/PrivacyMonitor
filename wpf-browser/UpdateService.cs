@@ -17,9 +17,34 @@ namespace PrivacyMonitor;
 /// </summary>
 public static class UpdateService
 {
-    /// <summary>Update server base URL (no trailing slash).</summary>
-    // Use port 3000 so the app reaches the Node server directly (no nginx required)
-    public static string BaseUrl { get; set; } = "http://187.77.71.151:3000";
+    private static string? _baseUrl;
+
+    /// <summary>Update server base URL (no trailing slash). Read from %LocalAppData%\\PrivacyMonitor\\update-server.txt if present, else default.</summary>
+    public static string BaseUrl
+    {
+        get
+        {
+            if (_baseUrl != null) return _baseUrl;
+            try
+            {
+                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PrivacyMonitor");
+                var path = Path.Combine(dir, "update-server.txt");
+                if (File.Exists(path))
+                {
+                    var line = File.ReadLines(path).FirstOrDefault()?.Trim() ?? "";
+                    if (!string.IsNullOrWhiteSpace(line) && (line.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || line.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        _baseUrl = line.TrimEnd('/');
+                        return _baseUrl;
+                    }
+                }
+            }
+            catch { }
+            _baseUrl = "http://187.77.71.151:3000";
+            return _baseUrl;
+        }
+        set => _baseUrl = string.IsNullOrWhiteSpace(value) ? null : value.TrimEnd('/');
+    }
 
     private static readonly HttpClient HttpClient = new()
     {

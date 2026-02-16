@@ -230,6 +230,11 @@ app.get('/api/download/:version?', (req, res) => {
   }
 
   const filePath = path.join(BUILDS_DIR, filename);
+  const resolvedPath = path.resolve(filePath);
+  const resolvedBuilds = path.resolve(BUILDS_DIR);
+  if (!resolvedPath.startsWith(resolvedBuilds) || resolvedPath === resolvedBuilds) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
     return res.status(404).json({ error: 'File not found', filename });
   }
@@ -470,7 +475,9 @@ app.use('/builds', express.static(BUILDS_DIR, { index: false }));
 // Ensures the browser gets a runnable file. If nginx sits in front, disable gzip for .exe (e.g. location ~* \.exe$ { gzip off; ... }).
 app.get('/PrivacyMonitor.exe', (req, res) => {
   const exePath = path.join(WEBSITE_DIR, 'PrivacyMonitor.exe');
-  if (!fs.existsSync(exePath)) return res.status(404).send('Not found');
+  const resolved = path.resolve(exePath);
+  const resolvedWeb = path.resolve(WEBSITE_DIR);
+  if (!resolved.startsWith(resolvedWeb) || !fs.existsSync(exePath)) return res.status(404).send('Not found');
   res.set({
     'Content-Type': 'application/octet-stream',
     'Content-Disposition': 'attachment; filename="PrivacyMonitor.exe"',
