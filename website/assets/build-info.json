@@ -1,9 +1,9 @@
 ﻿{
     "version":  "1.0.2",
     "sizeMB":  305.27,
-    "zipSizeMB":  292.89,
-    "sha256":  "6dee0e31b95d26e9b6e9c020a026e263fd56002605e23a4deab153085d297a37",
-    "sizeBytes":  320096643,
+    "zipSizeMB":  292.9,
+    "sha256":  "d123845e57056cb5e48a9f1f07fe7ca463da3a4663ce8221692f661abb81ae84",
+    "sizeBytes":  320100343,
     "date":  "2026-02-13",
     "zipName":  "PrivacyMonitor-1.0.2-win-x64.zip"
 }

@@ -311,6 +311,28 @@ namespace PrivacyMonitor
                 ("us.posthog.com",         "PostHog",                   "PostHog",     TrackerCategory.Analytics, 3),
                 ("launchdarkly.com",       "LaunchDarkly",              "LaunchDarkly", TrackerCategory.Analytics, 2),
                 ("cdn.launchdarkly.com",   "LaunchDarkly CDN",          "LaunchDarkly", TrackerCategory.Analytics, 2),
+
+                // ── Stronger: more ad tech / identity / tracking ──
+                ("stats.g.doubleclick.net","Google DoubleClick Stats",  "Google",      TrackerCategory.Advertising, 5),
+                ("tpc.googlesyndication.com","Google TPC",               "Google",      TrackerCategory.Advertising, 5),
+                ("securepubads.g.doubleclick.net", "Google Ad Manager", "Google",      TrackerCategory.Advertising, 5),
+                ("cm.g.doubleclick.net",   "Google Campaign Manager",   "Google",      TrackerCategory.Advertising, 5),
+                ("fundingchoices.google.com", "Google Funding Choices", "Google",      TrackerCategory.CMP, 3),
+                ("acsb.com",               "LiveRamp ACS",               "LiveRamp",    TrackerCategory.DMP, 5),
+                ("identity.liveintent.com", "LiveIntent Identity",      "LiveIntent",  TrackerCategory.DMP, 5),
+                ("idsync.rlcdn.com",       "LiveRamp ID Sync",          "LiveRamp",    TrackerCategory.DMP, 5),
+                ("ads.stickyadstv.com",   "Sticky Ads TV",              "Comcast",     TrackerCategory.Advertising, 4),
+                ("contextweb.com",         "PulsePoint",                "Magnite",     TrackerCategory.Advertising, 4),
+                ("adform.net",             "Adform",                    "Adform",      TrackerCategory.Advertising, 5),
+                ("adform.com",             "Adform",                    "Adform",      TrackerCategory.Advertising, 5),
+                ("sitescout.com",          "SiteScout",                 "Centro",      TrackerCategory.Advertising, 4),
+                ("adroll.com",             "AdRoll",                    "NextRoll",    TrackerCategory.Advertising, 5),
+                ("nextroll.com",           "NextRoll",                  "NextRoll",    TrackerCategory.Advertising, 5),
+                ("smartyads.com",          "SmartyAds",                 "SmartyAds",   TrackerCategory.Advertising, 4),
+                ("e-planning.net",         "ePlanning",                 "ePlanning",   TrackerCategory.Advertising, 4),
+                ("widespace.com",          "Widespace",                 "Widespace",   TrackerCategory.Advertising, 4),
+                ("adgrx.com",              "AdGear",                    "AdGear",      TrackerCategory.Advertising, 4),
+                ("adhigh.net",             "AdHigh",                    "AdHigh",      TrackerCategory.Advertising, 4),
             };
 
             TrackerDatabase = raw.Select(r => new TrackerInfo

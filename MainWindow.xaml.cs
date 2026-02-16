@@ -1975,6 +1975,18 @@ namespace PrivacyMonitor
                     catch { }
                 }
 
+                // Strip Referer on third-party requests to reduce cross-site leakage (stronger privacy).
+                if (!shouldCancelInBrowser && isThirdParty && profile.Mode != ProtectionMode.Monitor)
+                {
+                    try { e.Request.Headers.SetHeader("Referer", ""); } catch { }
+                }
+
+                // Do Not Track: signal to sites that user prefers not to be tracked (stronger privacy).
+                if (!shouldCancelInBrowser && profile.Mode != ProtectionMode.Monitor)
+                {
+                    try { e.Request.Headers.SetHeader("DNT", "1"); } catch { }
+                }
+
                 // Adaptive learning: record tracker signals (exclude generic cross-site)
                 var trackerSignals = entry.Signals.Where(s =>
                     s.SignalType == "known_tracker" ||

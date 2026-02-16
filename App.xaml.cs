@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 
 namespace PrivacyMonitor;
@@ -13,11 +14,63 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Export blocklist for Chrome extension (same engine as browser). Run: PrivacyMonitor.exe --export-blocklist
+        if (e.Args.Contains("--export-blocklist", StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                string? repoRoot = FindRepoRoot();
+                if (repoRoot != null)
+                {
+                    string outPath = Path.Combine(repoRoot, "chrome-extension", "tracker-domains.js");
+                    string[] domains = ProtectionEngine.GetBlocklistDomainsForExport();
+                    var sb = new System.Text.StringBuilder();
+                    sb.AppendLine("/**");
+                    sb.AppendLine(" * Generated from Privacy Monitor browser engines (ProtectionEngine + PrivacyEngine).");
+                    sb.AppendLine(" * Run: PrivacyMonitor.exe --export-blocklist");
+                    sb.AppendLine(" */");
+                    sb.AppendLine("const BLOCK_KNOWN_DOMAINS = [");
+                    foreach (var d in domains)
+                        sb.AppendLine("  \"" + d.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\",");
+                    sb.AppendLine("];");
+                    sb.AppendLine("const AGGRESSIVE_EXTRA_DOMAINS = [];");
+                    sb.AppendLine("function getDomainsForMode(mode) {");
+                    sb.AppendLine("  if (mode === 'off') return [];");
+                    sb.AppendLine("  return BLOCK_KNOWN_DOMAINS;");
+                    sb.AppendLine("}");
+                    sb.AppendLine("if (typeof self !== \"undefined\") {");
+                    sb.AppendLine("  self.BLOCK_KNOWN_DOMAINS = BLOCK_KNOWN_DOMAINS;");
+                    sb.AppendLine("  self.AGGRESSIVE_EXTRA_DOMAINS = AGGRESSIVE_EXTRA_DOMAINS;");
+                    sb.AppendLine("  self.getDomainsForMode = getDomainsForMode;");
+                    sb.AppendLine("}");
+                    string? dir = Path.GetDirectoryName(outPath);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                        Directory.CreateDirectory(dir);
+                    File.WriteAllText(outPath, sb.ToString(), System.Text.Encoding.UTF8);
+                }
+            }
+            catch { }
+            Shutdown(0);
+            return;
+        }
+
         // Handle --apply-update: replace current exe with new and restart (then exit).
         if (UpdateService.TryHandleApplyUpdate(out _))
         {
             Shutdown(0);
             return;
+        }
+
+        static string? FindRepoRoot()
+        {
+            string? dir = AppContext.BaseDirectory;
+            while (dir != null)
+            {
+                if (Directory.Exists(Path.Combine(dir, "chrome-extension")))
+                    return dir;
+                dir = Path.GetDirectoryName(dir);
+            }
+            return null;
         }
 
         SystemThemeDetector.WatchTheme();

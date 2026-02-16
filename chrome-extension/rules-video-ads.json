@@ -1,0 +1,6 @@
+[
+  {"id":10001,"priority":1,"action":{"type":"block"},"condition":{"regexFilter":".*/(vast|vpaid)(/|\\.xml|\\.js).*","resourceTypes":["xmlhttprequest","script","media"],"isUrlFilterCaseSensitive":false}},
+  {"id":10002,"priority":1,"action":{"type":"block"},"condition":{"regexFilter":".*ad_creative.*","resourceTypes":["media","xmlhttprequest"],"isUrlFilterCaseSensitive":false}},
+  {"id":10003,"priority":1,"action":{"type":"block"},"condition":{"regexFilter":".*ad_break.*","resourceTypes":["media","xmlhttprequest"],"isUrlFilterCaseSensitive":false}},
+  {"id":10004,"priority":1,"action":{"type":"block"},"condition":{"regexFilter":".*/(preroll|postroll|midroll).*","resourceTypes":["media","xmlhttprequest"],"isUrlFilterCaseSensitive":false}}
+]

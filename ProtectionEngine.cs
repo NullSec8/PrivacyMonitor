@@ -166,11 +166,11 @@ namespace PrivacyMonitor
                 };
             }
 
-            // 3) Known tracker detection (confidence-weighted) — lower thresholds for stronger protection
+            // 3) Known tracker detection (confidence-weighted) — stronger: lower thresholds block more
             double trackerConfidence = MaxSignalConfidence(entry.Signals, "known_tracker", "heuristic_tracker");
             if (blockAdsTrackers && !string.IsNullOrEmpty(entry.TrackerLabel))
             {
-                if (mode == ProtectionMode.BlockKnown && trackerConfidence >= 0.35)
+                if (mode == ProtectionMode.BlockKnown && trackerConfidence >= 0.28)
                 {
                     ObserveTrackerAppearance(entry.Host, pageHost);
                     return new BlockDecision
@@ -183,7 +183,7 @@ namespace PrivacyMonitor
                     };
                 }
 
-                if (mode == ProtectionMode.Aggressive && trackerConfidence >= 0.22)
+                if (mode == ProtectionMode.Aggressive && trackerConfidence >= 0.18)
                 {
                     ObserveTrackerAppearance(entry.Host, pageHost);
                     return new BlockDecision
@@ -197,14 +197,14 @@ namespace PrivacyMonitor
                 }
             }
 
-            // 4) Behavioral blocking (JS injection / session replay signatures)
+            // 4) Behavioral blocking (JS injection / session replay signatures) — stronger threshold
             if (blockBehavioral)
             {
                 var behavioral = entry.Signals.FirstOrDefault(s =>
                     s.SignalType == "js_injection" ||
                     s.SignalType == "session_replay" ||
                     s.SignalType == "behavioral_tracking");
-                if (behavioral != null && behavioral.Confidence >= 0.65)
+                if (behavioral != null && behavioral.Confidence >= 0.55)
                 {
                     return new BlockDecision
                     {
@@ -233,7 +233,7 @@ namespace PrivacyMonitor
                     .OrderByDescending(s => s.Confidence)
                     .FirstOrDefault();
 
-                if (heuristic != null && heuristic.Confidence >= 0.34)
+                if (heuristic != null && heuristic.Confidence >= 0.28)
                 {
                     ObserveTrackerAppearance(entry.Host, pageHost);
                     return new BlockDecision
@@ -743,6 +743,17 @@ namespace PrivacyMonitor
             }
 
             return list;
+        }
+
+        /// <summary>Returns all blocklist domains for export (e.g. Chrome extension). Host-only, deduped. Same engine as the browser.</summary>
+        public static string[] GetBlocklistDomainsForExport()
+        {
+            var entries = GetDefaultBlocklistEntries();
+            return entries
+                .Select(e => (e.Domain ?? "").Split('/')[0].Trim().ToLowerInvariant())
+                .Where(d => !string.IsNullOrEmpty(d))
+                .Distinct()
+                .ToArray();
         }
 
         // ════════════════════════════════════════════

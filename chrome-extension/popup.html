@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <p class="privacy-statement">This extension does not collect or transmit personal data.</p>
+    <div class="header">
+      <span class="title">Privacy Monitor</span>
+      <span class="tagline">Ad blocker & data collection analysis</span>
+    </div>
+    <div class="mode-group">
+      <label class="mode-option">
+        <input type="radio" name="mode" value="off" id="modeOff">
+        <span class="mode-label">Off</span>
+        <span class="mode-desc">No blocking</span>
+      </label>
+      <label class="mode-option">
+        <input type="radio" name="mode" value="blockKnown" id="modeBlockKnown">
+        <span class="mode-label">Block known</span>
+        <span class="mode-desc">Confirmed trackers & ads (<strong id="knownCount">0</strong> domains)</span>
+      </label>
+      <label class="mode-option">
+        <input type="radio" name="mode" value="aggressive" id="modeAggressive">
+        <span class="mode-label">Aggressive</span>
+        <span class="mode-desc">Known + heuristic (<strong id="aggressiveCount">0</strong> domains)</span>
+      </label>
+    </div>
+    <label class="click-guard-option">
+      <input type="checkbox" id="blockClickHijacking" checked>
+      <span>Block click hijacking</span>
+    </label>
+    <div class="ip-section">
+      <div class="ip-label">Your public IP address</div>
+      <div class="ip-row">
+        <div class="ip-value" id="ipValue">—</div>
+        <button type="button" class="ip-refresh" id="ipRefresh" title="Refresh">↻</button>
+      </div>
+      <div class="ip-status" id="ipStatus" hidden></div>
+    </div>
+    <div class="analysis-section">
+      <div class="analysis-title">Data collection on this page</div>
+      <div class="analysis-loading" id="analysisLoading">Analyzing…</div>
+      <div class="analysis-result" id="analysisResult" hidden>
+        <div class="analysis-count"><strong id="blockedCount">0</strong> tracker(s) blocked</div>
+        <div class="analysis-list" id="blockedList"></div>
+      </div>
+      <div class="analysis-error" id="analysisError" hidden>Open a webpage to see analysis.</div>
+    </div>
+    <div class="actions">
+      <a href="#" id="refreshLink">Refresh analysis</a>
+      <a href="#" id="optionsLink">Options</a>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
