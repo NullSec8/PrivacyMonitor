@@ -479,6 +479,19 @@ img { max-width: 100%; height: auto; display: block; }
 }
 .carousel-wrap:hover .carousel-slide img { transform: scale(1.01); }
 
+.carousel-placeholder {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+  color: var(--text-tertiary);
+  font-size: 15px;
+}
+.carousel-placeholder.visible { display: flex; }
+
 .carousel-controls {
   display: flex;
   align-items: center;
@@ -539,6 +552,11 @@ img { max-width: 100%; height: auto; display: block; }
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 24px;
   margin-bottom: 48px;
+}
+.download-cards .download-card:only-child {
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .download-card {

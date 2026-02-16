@@ -76,10 +76,12 @@
         <div class="carousel" role="region" aria-label="Screenshots">
           <div class="carousel-track">
             <div class="carousel-slide">
-              <img src="assets/screens/starting.png" alt="Starting page">
+              <img src="assets/screens/starting.png" alt="Starting page" onerror="this.style.display='none'; this.nextElementSibling?.classList.add('visible');">
+              <div class="carousel-placeholder" aria-hidden="true">Starting page</div>
             </div>
             <div class="carousel-slide">
-              <img src="assets/screens/dashboard.png" alt="Dashboard panel">
+              <img src="assets/screens/dashboard.png" alt="Dashboard panel" onerror="this.style.display='none'; this.nextElementSibling?.classList.add('visible');">
+              <div class="carousel-placeholder" aria-hidden="true">Dashboard panel</div>
             </div>
           </div>
         </div>

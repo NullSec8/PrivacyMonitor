@@ -45,6 +45,27 @@ namespace PrivacyMonitor
         }
     }
 
+    /// <summary>Exposed to WebView2 so the History page can clear history without relying on postMessage (unavailable for NavigateToString content).</summary>
+    public class HistoryClearBridge
+    {
+        private readonly MainWindow _window;
+        private readonly BrowserTab _tab;
+
+        public HistoryClearBridge(MainWindow window, BrowserTab tab) { _window = window; _tab = tab; }
+
+        public void ClearHistory()
+        {
+            _window?.Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    _window.ClearHistoryAndRefresh(_tab);
+                }
+                catch { }
+            });
+        }
+    }
+
     public partial class MainWindow : Window
     {
         private sealed class TaskManagerRow
@@ -209,16 +230,20 @@ namespace PrivacyMonitor
             var sb = new StringBuilder();
             sb.Append("<!DOCTYPE html><html><head><meta name='color-scheme' content='light dark'/><meta charset='utf-8'/><title>History</title><style>");
             sb.Append(HistoryPageCss);
-            sb.Append("</style></head><body><div class='header'><h1>History</h1><div class='header-links'><a href='about:welcome'>New tab</a> <span style='color:var(--text-muted)'>|</span> <a href='about:clearhistory' class='btn-danger'>Clear history</a></div></div>");
+            sb.Append("</style></head><body><div class='header'><h1>History</h1><div class='header-links'><a href='about:welcome'>New tab</a> <span style='color:var(--text-muted)'>|</span> <button type='button' id='clearBtn' class='btn-danger'>Clear history</button></div></div>");
             sb.Append("<div class='search-wrap'><input type='text' class='search' id='q' placeholder='Search history' autofocus/></div>");
             sb.Append("<div class='section'><div class='section-title'>Browsing history</div><div class='list'><ul id='list'>");
             foreach (var (title, url, visited) in _recentUrls)
             {
-                var t = EscapeHtml(title.Length > 0 ? title : url).Replace("'", "&#39;");
-                var u = EscapeHtml(url).Replace("'", "&#39;");
+                var safeTitle = title ?? "";
+                var safeUrl = url ?? "";
+                var t = EscapeHtml(safeTitle.Length > 0 ? safeTitle : safeUrl).Replace("'", "&#39;");
+                var u = EscapeHtml(safeUrl).Replace("'", "&#39;");
                 var timeStr = EscapeHtml(FormatVisitedTime(visited)).Replace("'", "&#39;");
+                bool safeScheme = safeUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || safeUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+                var href = safeScheme ? u : "about:blank";
                 sb.Append("<li data-title='").Append(t).Append("' data-url='").Append(u).Append("'>");
-                sb.Append("<div class='row'><a href='").Append(u).Append("'>").Append(t).Append("</a><span class='time'>").Append(timeStr).Append("</span></div>");
+                sb.Append("<div class='row'><a href='").Append(href).Append("'>").Append(t).Append("</a><span class='time'>").Append(timeStr).Append("</span></div>");
                 sb.Append("<span class='url'>").Append(u).Append("</span></li>");
             }
             sb.Append("</ul></div></div>");
@@ -234,6 +259,15 @@ namespace PrivacyMonitor
                             var li=items[i];
                             li.classList.toggle('hide',v&&(li.getAttribute('data-title').toLowerCase().indexOf(v)<0&&li.getAttribute('data-url').toLowerCase().indexOf(v)<0));
                         }
+                    };
+                }
+                var clearBtn=document.getElementById('clearBtn');
+                if(clearBtn){
+                    clearBtn.onclick=function(){
+                        var bridge=window.chrome&&window.chrome.webview&&window.chrome.webview.hostObjects&&window.chrome.webview.hostObjects.sync&&window.chrome.webview.hostObjects.sync.historyBridge;
+                        if(bridge){ bridge.ClearHistory(); return; }
+                        if(window.chrome&&window.chrome.webview&&window.chrome.webview.postMessage)
+                            window.chrome.webview.postMessage(JSON.stringify({cat:'clearHistory'}));
                     };
                 }
             </script></body></html>");
@@ -491,27 +525,42 @@ namespace PrivacyMonitor
             if (_isPrivate) return;
             try
             {
-                if (File.Exists(RecentPath()))
+                if (!File.Exists(RecentPath()))
                 {
-                    var raw = JsonSerializer.Deserialize<List<JsonElement>>(File.ReadAllText(RecentPath()));
-                    _recentUrls = (raw ?? new List<JsonElement>()).Select(e =>
+                    _recentUrls = new List<(string, string, DateTime)>();
+                }
+                else
                 {
-                    var title = e.GetProperty("Title").GetString() ?? "";
-                    var url = e.GetProperty("Url").GetString() ?? "";
-                    var visited = DateTime.UtcNow;
-                    try { if (e.TryGetProperty("Visited", out var v)) visited = DateTime.Parse(v.GetString() ?? "", null, System.Globalization.DateTimeStyles.RoundtripKind); } catch { }
-                    return (title, url, visited);
-                }).Where(t => t.Item2.Length > 0).Take(MaxRecent).ToList();
+                    var content = File.ReadAllText(RecentPath());
+                    if (string.IsNullOrWhiteSpace(content)) { _recentUrls = new List<(string, string, DateTime)>(); return; }
+                    var raw = JsonSerializer.Deserialize<List<JsonElement>>(content);
+                    _recentUrls = (raw ?? new List<JsonElement>())
+                        .Select(e =>
+                        {
+                            if (!e.TryGetProperty("Url", out var urlEl)) return ( "", "", DateTime.UtcNow );
+                            var url = urlEl.GetString() ?? "";
+                            if (url.Length == 0) return ( "", "", DateTime.UtcNow );
+                            var title = e.TryGetProperty("Title", out var titleEl) ? titleEl.GetString() ?? "" : "";
+                            var visited = DateTime.UtcNow;
+                            try { if (e.TryGetProperty("Visited", out var v)) visited = DateTime.Parse(v.GetString() ?? "", null, System.Globalization.DateTimeStyles.RoundtripKind); } catch { }
+                            return (title, url, visited);
+                        })
+                        .Where(t => t.Item2.Length > 0).Take(MaxRecent).ToList();
                 }
             }
             catch { _recentUrls = new List<(string, string, DateTime)>(); }
         }
+
         private void AddRecent(string title, string url)
         {
             if (_isPrivate) return;
-            if (string.IsNullOrWhiteSpace(url) || url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)) return;
+            if (string.IsNullOrWhiteSpace(url)) return;
+            if (url.StartsWith("about:", StringComparison.OrdinalIgnoreCase) ||
+                url.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
+                url.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return;
             _recentUrls.RemoveAll(t => string.Equals(t.Url, url, StringComparison.OrdinalIgnoreCase));
-            _recentUrls.Insert(0, (title.Length > 50 ? title.Substring(0, 50) + "…" : title, url, DateTime.UtcNow));
+            var safeTitle = title ?? "";
+            _recentUrls.Insert(0, (safeTitle.Length > 50 ? safeTitle.Substring(0, 50) + "…" : safeTitle, url, DateTime.UtcNow));
             while (_recentUrls.Count > MaxRecent) _recentUrls.RemoveAt(_recentUrls.Count - 1);
             try { File.WriteAllText(RecentPath(), JsonSerializer.Serialize(_recentUrls.Select(t => new { t.Title, t.Url, Visited = t.Visited.ToString("O") }))); } catch { }
         }
@@ -519,6 +568,15 @@ namespace PrivacyMonitor
         {
             if (_isPrivate) return;
             try { File.WriteAllText(RecentPath(), JsonSerializer.Serialize(_recentUrls.Select(t => new { t.Title, t.Url, Visited = t.Visited.ToString("O") }))); } catch { }
+        }
+
+        /// <summary>Called from History page (host object or postMessage). Clears history and refreshes the given tab.</summary>
+        internal void ClearHistoryAndRefresh(BrowserTab tab)
+        {
+            _recentUrls.Clear();
+            SaveRecent();
+            try { tab?.WebView?.CoreWebView2?.NavigateToString(GetHistoryHtml()); } catch { }
+            if (StatusText != null) StatusText.Text = "History cleared.";
         }
 
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -950,15 +1008,18 @@ namespace PrivacyMonitor
 
             try
             {
-                await Task.Run(() =>
+                using (zipStream)
                 {
-                    if (Directory.Exists(extractRoot)) Directory.Delete(extractRoot, true);
-                    Directory.CreateDirectory(extractRoot);
-                    using (var zip = new ZipArchive(zipStream, ZipArchiveMode.Read, leaveOpen: false))
+                    await Task.Run(() =>
                     {
-                        zip.ExtractToDirectory(extractRoot);
-                    }
-                }).ConfigureAwait(false);
+                        if (Directory.Exists(extractRoot)) Directory.Delete(extractRoot, true);
+                        Directory.CreateDirectory(extractRoot);
+                        using (var zip = new ZipArchive(zipStream, ZipArchiveMode.Read, leaveOpen: true))
+                        {
+                            zip.ExtractToDirectory(extractRoot);
+                        }
+                    }).ConfigureAwait(false);
+                }
                 if (File.Exists(Path.Combine(webView2Path, "msedgewebview2.exe")))
                     return webView2Path;
             }
@@ -994,6 +1055,7 @@ namespace PrivacyMonitor
                 cw.WebResourceResponseReceived += (s, e) => OnWebResourceResponseReceived(tab, e);
                 cw.WebMessageReceived += (s, e) => OnWebMessage(tab, e);
                 try { cw.AddHostObjectToScript("settingsBridge", new SettingsSaveBridge(this, tab)); } catch { }
+                try { cw.AddHostObjectToScript("historyBridge", new HistoryClearBridge(this, tab)); } catch { }
                 cw.NavigationStarting += (s, e) => OnNavigationStarting(tab, e);
                 cw.NavigationCompleted += (s, e) => OnNavigationCompleted(tab, e);
                 cw.DownloadStarting += (s, e) => OnDownloadStarting(tab, e);
@@ -1004,7 +1066,7 @@ namespace PrivacyMonitor
                     e.Handled = true;
                     if (_settings.BlockPopups)
                         return; // Block pop-up entirely
-                    Dispatcher.Invoke(async () => await CreateNewTab(e.Uri));
+                    Dispatcher.Invoke(() => { _ = CreateNewTab(e.Uri); });
                 };
                 await cw.AddScriptToExecuteOnDocumentCreatedAsync(ProtectionEngine.ElementBlockerBootstrapScript);
                 if (_settings.HideInPageAds)
@@ -1059,7 +1121,7 @@ namespace PrivacyMonitor
                     UpdateAddressBarPlaceholder();
                     LoadingBar.Visibility = t.IsLoading ? Visibility.Visible : Visibility.Collapsed;
                     UpdateLockIcon(t);
-                    StatusText.Text = t.CurrentHost.Length > 0 ? t.CurrentHost : "Ready — enter a URL above to start";
+                    StatusText.Text = !string.IsNullOrEmpty(t.CurrentHost) ? t.CurrentHost : "Ready — enter a URL above to start";
                     UpdateProtectionUI(t);
                     UpdateNavButtons();
                     UpdateStarButton();
@@ -1524,13 +1586,13 @@ namespace PrivacyMonitor
         private void UpdateTabTitle(BrowserTab tab)
         {
             if (!tab.IsReady) return;
-            tab.Title = tab.WebView.CoreWebView2.DocumentTitle ?? "New Tab";
+            tab.Title = tab.WebView?.CoreWebView2?.DocumentTitle ?? "New Tab";
             string d = tab.Title.Length > 22 ? tab.Title[..22] + "..." : tab.Title;
             tab.TitleBlock.Text = d;
             tab.TabHeader.ToolTip = tab.Title;
-            if (tab.CurrentHost.Length > 0)
+            if (!string.IsNullOrEmpty(tab.CurrentHost))
             {
-                tab.InitialBlock.Text = tab.CurrentHost[0].ToString().ToUpper();
+                tab.InitialBlock.Text = tab.CurrentHost![0].ToString().ToUpperInvariant();
                 int hash = Math.Abs(tab.CurrentHost.GetHashCode());
                 byte r = (byte)(50 + hash % 150), g = (byte)(50 + (hash / 256) % 150), b = (byte)(80 + (hash / 65536) % 130);
                 if (tab.InitialBlock.Parent is Border ib) ib.Background = new SolidColorBrush(Color.FromRgb(r, g, b));
@@ -1653,7 +1715,7 @@ namespace PrivacyMonitor
                     var uri = new Uri(e.Uri!);
                     if (!uri.Host.Equals(tab.CurrentHost, StringComparison.OrdinalIgnoreCase))
                         tab.ResetDetection();
-                    tab.CurrentHost = uri.Host; tab.Url = e.Uri; tab.IsLoading = true;
+                    tab.CurrentHost = uri.Host ?? ""; tab.Url = e.Uri; tab.IsLoading = true;
                     if (!string.IsNullOrEmpty(tab.CurrentHost))
                     {
                         var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
@@ -1690,7 +1752,8 @@ namespace PrivacyMonitor
         private static async Task UpdatePerNavigationScriptsAsync(BrowserTab tab, SiteProfile profile)
         {
             if (!tab.IsReady) return;
-            var cw = tab.WebView.CoreWebView2;
+            var cw = tab.WebView?.CoreWebView2;
+            if (cw == null) return;
 
             try
             {
@@ -1778,7 +1841,7 @@ namespace PrivacyMonitor
             Dispatcher.Invoke(() =>
             {
                 tab.IsLoading = false;
-                try { tab.Url = tab.WebView.CoreWebView2.Source; } catch { }
+                try { tab.Url = tab.WebView?.CoreWebView2?.Source ?? tab.Url; } catch { }
                 if (tab.Id == _activeTabId)
                 {
                     bool isWelcome = string.IsNullOrEmpty(tab.Url) || tab.Url.StartsWith("about:", StringComparison.OrdinalIgnoreCase);
@@ -1802,8 +1865,8 @@ namespace PrivacyMonitor
             }
             catch { }
 
-            try { await tab.WebView.CoreWebView2.ExecuteScriptAsync(PrivacyEngine.StorageEnumerationScript); } catch { }
-            try { await tab.WebView.CoreWebView2.ExecuteScriptAsync(PrivacyEngine.WebRtcLeakScript); } catch { }
+            var cwNav = tab.WebView?.CoreWebView2;
+            if (cwNav != null) { try { await cwNav.ExecuteScriptAsync(PrivacyEngine.StorageEnumerationScript); } catch { } try { await cwNav.ExecuteScriptAsync(PrivacyEngine.WebRtcLeakScript); } catch { } }
             _dirty = true;
         }
 
@@ -1896,17 +1959,20 @@ namespace PrivacyMonitor
         {
             try
             {
-                var request = e.Request; var uri = new Uri(request.Uri);
+                var request = e.Request;
+                if (!Uri.TryCreate(request.Uri, UriKind.Absolute, out var uri) || !uri.IsAbsoluteUri)
+                    return; // Let malformed or non-absolute URIs through without recording
+                var reqHost = uri.Host ?? "";
                 bool isThirdParty = !string.IsNullOrEmpty(tab.CurrentHost) &&
-                    !uri.Host.Equals(tab.CurrentHost, StringComparison.OrdinalIgnoreCase) &&
-                    !uri.Host.EndsWith("." + tab.CurrentHost, StringComparison.OrdinalIgnoreCase);
+                    !reqHost.Equals(tab.CurrentHost, StringComparison.OrdinalIgnoreCase) &&
+                    !reqHost.EndsWith("." + tab.CurrentHost, StringComparison.OrdinalIgnoreCase);
                 var headers = new Dictionary<string, string>();
                 var iter = request.Headers.GetEnumerator();
                 while (iter.MoveNext()) headers[iter.Current.Key] = iter.Current.Value;
                 var entry = new RequestEntry
                 {
                     Id = System.Threading.Interlocked.Increment(ref tab.NextRequestId),
-                    Time = DateTime.Now, Method = request.Method, Host = uri.Host,
+                    Time = DateTime.Now, Method = request.Method, Host = uri.Host ?? "",
                     Path = uri.PathAndQuery, FullUrl = uri.AbsoluteUri, IsThirdParty = isThirdParty,
                     HasBody = request.Content != null, RequestHeaders = headers,
                     ResourceContext = e.ResourceContext.ToString()
@@ -1917,7 +1983,7 @@ namespace PrivacyMonitor
 
                 // JS injection heuristic (third-party scripts with tracking signals)
                 if (entry.IsThirdParty && e.ResourceContext == CoreWebView2WebResourceContext.Script &&
-                    (!string.IsNullOrEmpty(entry.TrackerLabel) || entry.TrackingParams.Count > 0))
+                    (!string.IsNullOrEmpty(entry.TrackerLabel) || (entry.TrackingParams?.Count ?? 0) > 0))
                 {
                     entry.Signals.Add(new DetectionSignal
                     {
@@ -1963,8 +2029,9 @@ namespace PrivacyMonitor
                     // Block the request by returning an empty 403 response
                     try
                     {
-                        e.Response = tab.WebView.CoreWebView2.Environment.CreateWebResourceResponse(
+                        var blockResponse = tab.WebView?.CoreWebView2?.Environment.CreateWebResourceResponse(
                             null, 403, "Blocked by PrivacyMonitor", "");
+                        if (blockResponse != null) e.Response = blockResponse;
                     }
                     catch { }
 
@@ -1972,7 +2039,7 @@ namespace PrivacyMonitor
                     tab.BlockedCount++;
                     tab.BlockedRequests.Add(new BlockedRequestInfo
                     {
-                        Time = DateTime.Now, Host = uri.Host, Url = uri.AbsoluteUri,
+                        Time = DateTime.Now, Host = reqHost, Url = uri.AbsoluteUri,
                         Reason = decision.Reason, Category = entry.BlockCategory,
                         Confidence = decision.Confidence, TrackerLabel = decision.TrackerLabel,
                         ResourceType = entry.ResourceContext, Method = entry.Method
@@ -1983,9 +2050,9 @@ namespace PrivacyMonitor
                     // Add host to in-page element blocker
                     if (tab.IsReady)
                     {
-                        string script = ProtectionEngine.BuildBlockerAddHostScript(uri.Host);
+                        string script = ProtectionEngine.BuildBlockerAddHostScript(reqHost);
                         if (!string.IsNullOrEmpty(script))
-                            Dispatcher.BeginInvoke(() => tab.WebView.CoreWebView2.ExecuteScriptAsync(script));
+                            Dispatcher.BeginInvoke(() => tab.WebView?.CoreWebView2?.ExecuteScriptAsync(script));
                     }
                 }
                 else if (profile.AntiFingerprint && profile.Mode != ProtectionMode.Monitor)
@@ -2026,10 +2093,10 @@ namespace PrivacyMonitor
                 {
                     foreach (var sig in trackerSignals)
                         if (!isMedia)
-                            ProtectionEngine.ObserveTrackerSignal(uri.Host, sig.SignalType, sig.Confidence);
+                            ProtectionEngine.ObserveTrackerSignal(reqHost, sig.SignalType, sig.Confidence);
 
                     if (isThirdParty && trackerSignals.Count > 0 && !isMedia)
-                        ProtectionEngine.ObserveCrossSiteAppearance(uri.Host, tab.CurrentHost);
+                        ProtectionEngine.ObserveCrossSiteAppearance(reqHost, tab.CurrentHost);
                 }
 
                 // Enqueue for batched drain (avoids per-request Dispatcher.Invoke)
@@ -2051,6 +2118,7 @@ namespace PrivacyMonitor
         {
             try
             {
+                if (e?.Request == null || e?.Response == null) return;
                 var uri = e.Request.Uri; int statusCode = e.Response.StatusCode;
                 var respHeaders = new Dictionary<string, string>();
                 var iter = e.Response.Headers.GetEnumerator();
@@ -2089,11 +2157,12 @@ namespace PrivacyMonitor
             {
                 using var doc = JsonDocument.Parse(e.WebMessageAsJson);
                 var root = doc.RootElement;
-                string cat = root.GetProperty("cat").GetString() ?? "";
+                if (!root.TryGetProperty("cat", out var catEl)) return;
+                string cat = catEl.GetString() ?? "";
                 if (cat == "fp")
                 {
-                    string type = root.GetProperty("type").GetString() ?? "";
-                    string detail = root.GetProperty("detail").GetString() ?? "";
+                    string type = root.TryGetProperty("type", out var typeEl) ? typeEl.GetString() ?? "" : "";
+                    string detail = root.TryGetProperty("detail", out var detailEl) ? detailEl.GetString() ?? "" : "";
                     string source = root.TryGetProperty("source", out var src) ? src.GetString() ?? "" : "";
                     long ts = root.TryGetProperty("ts", out var tsv) ? tsv.GetInt64() : 0;
                     if (!tab.Fingerprints.Any(f => f.Type == type))
@@ -2131,7 +2200,8 @@ namespace PrivacyMonitor
                 }
                 else if (cat == "webrtc")
                 {
-                    string ip = root.GetProperty("ip").GetString() ?? "";
+                    if (!root.TryGetProperty("ip", out var ipEl)) return;
+                    string ip = ipEl.GetString() ?? "";
                     if (!tab.WebRtcLeaks.Any(l => l.IpAddress == ip))
                     {
                         string tp = root.TryGetProperty("type", out var t) ? t.GetString() ?? "" : "";
@@ -2151,13 +2221,7 @@ namespace PrivacyMonitor
                 }
                 else if (cat == "clearHistory")
                 {
-                    Dispatcher.Invoke(() =>
-                    {
-                        _recentUrls.Clear();
-                        SaveRecent();
-                        try { tab.WebView?.CoreWebView2?.NavigateToString(GetHistoryHtml()); } catch { }
-                        if (StatusText != null) StatusText.Text = "History cleared.";
-                    });
+                    ClearHistoryAndRefresh(tab);
                 }
                 else if (cat == "memory")
                 {
@@ -2204,16 +2268,16 @@ namespace PrivacyMonitor
         private static void ParseStorage(BrowserTab tab, JsonElement root)
         {
             if (root.TryGetProperty("cookies", out var ca))
-                foreach (var c in ca.EnumerateArray()) { string n = c.GetProperty("name").GetString() ?? ""; string v = c.TryGetProperty("value", out var vv) ? vv.GetString() ?? "" : "";
-                    tab.Cookies.Add(new CookieItem { Name = n, Value = v, Domain = tab.CurrentHost, Classification = PrivacyEngine.ClassifyCookie(n) }); }
+                foreach (var c in ca.EnumerateArray()) { if (!c.TryGetProperty("name", out var nEl)) continue; string n = nEl.GetString() ?? ""; string v = c.TryGetProperty("value", out var vv) ? vv.GetString() ?? "" : "";
+                    tab.Cookies.Add(new CookieItem { Name = n, Value = v, Domain = tab.CurrentHost ?? "", Classification = PrivacyEngine.ClassifyCookie(n) }); }
             if (root.TryGetProperty("localStorage", out var ls))
-                foreach (var item in ls.EnumerateArray()) { string k = item.GetProperty("key").GetString() ?? ""; int sz = item.TryGetProperty("size", out var s) ? s.GetInt32() : 0;
+                foreach (var item in ls.EnumerateArray()) { if (!item.TryGetProperty("key", out var kEl)) continue; string k = kEl.GetString() ?? ""; int sz = item.TryGetProperty("size", out var s) ? s.GetInt32() : 0;
                     tab.Storage.Add(new StorageItem { Store = "localStorage", Key = k, Size = sz, Classification = PrivacyEngine.ClassifyStorageKey(k) }); }
             if (root.TryGetProperty("sessionStorage", out var ss))
-                foreach (var item in ss.EnumerateArray()) { string k = item.GetProperty("key").GetString() ?? ""; int sz = item.TryGetProperty("size", out var s) ? s.GetInt32() : 0;
+                foreach (var item in ss.EnumerateArray()) { if (!item.TryGetProperty("key", out var kEl)) continue; string k = kEl.GetString() ?? ""; int sz = item.TryGetProperty("size", out var s) ? s.GetInt32() : 0;
                     tab.Storage.Add(new StorageItem { Store = "sessionStorage", Key = k, Size = sz, Classification = PrivacyEngine.ClassifyStorageKey(k) }); }
             if (root.TryGetProperty("indexedDB", out var idb))
-                foreach (var item in idb.EnumerateArray()) { string n = item.GetProperty("name").GetString() ?? "";
+                foreach (var item in idb.EnumerateArray()) { if (!item.TryGetProperty("name", out var nEl)) continue; string n = nEl.GetString() ?? "";
                     tab.Storage.Add(new StorageItem { Store = "IndexedDB", Key = n, Classification = PrivacyEngine.ClassifyStorageKey(n) }); }
         }
 
@@ -2240,7 +2304,7 @@ namespace PrivacyMonitor
 
             var scan = BuildScanResult(tab);
             // Collect all signals across requests for aggregate analysis
-            scan.AllSignals = tab.Requests.SelectMany(r => r.Signals).ToList();
+            scan.AllSignals = tab.Requests.SelectMany(r => r.Signals ?? Enumerable.Empty<DetectionSignal>()).ToList();
             var score = PrivacyEngine.CalculateScore(scan);
             scan.Score = score; scan.GdprFindings = PrivacyEngine.MapToGdpr(scan);
 
@@ -2270,7 +2334,7 @@ namespace PrivacyMonitor
             }
             if (ReportPlainSummary != null) ReportPlainSummary.Text = GetReportPlainSummary(score, tab);
             UpdateScoreRing(score.NumericScore);
-            try { var parent = ScoreBarFill.Parent as Grid; if (parent != null && parent.ActualWidth > 0) ScoreBarFill.Width = parent.ActualWidth * score.NumericScore / 100.0; else ScoreBarFill.Width = 0; } catch { }
+            try { var parent = ScoreBarFill.Parent as Grid; if (parent != null && parent.ActualWidth > 0) ScoreBarFill.Width = parent.ActualWidth * Math.Clamp(score.NumericScore, 0, 100) / 100.0; else ScoreBarFill.Width = 0; } catch { }
             ScoreBarFill.Background = ScoreBadgeBg(score.NumericScore);
 
             // Category score bars
@@ -2375,13 +2439,13 @@ namespace PrivacyMonitor
             bool filterOn = FilterCheck?.IsChecked == true;
             string search = SearchBox?.Text?.Trim().ToLowerInvariant() ?? "";
             var visible = tab.Requests.AsEnumerable();
-            if (filterOn) visible = visible.Where(r => r.IsThirdParty || !string.IsNullOrEmpty(r.TrackerLabel) || r.TrackingParams.Count > 0);
-            if (search.Length > 0) visible = visible.Where(r => r.Host.Contains(search, StringComparison.OrdinalIgnoreCase) || r.Path.Contains(search, StringComparison.OrdinalIgnoreCase) || (r.TrackerLabel?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+            if (filterOn) visible = visible.Where(r => r.IsThirdParty || !string.IsNullOrEmpty(r.TrackerLabel) || (r.TrackingParams?.Count ?? 0) > 0);
+            if (search.Length > 0) visible = visible.Where(r => (r.Host?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) || (r.Path?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) || (r.TrackerLabel?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
             RequestList.ItemsSource = visible.Reverse().Take(300).Select(r => {
                 string typeLabel = r.IsBlocked ? (_expertMode ? (r.BlockCategory == "Ad" ? "BLOCKED AD" : r.BlockCategory == "Behavioral" ? "BLOCKED BEHAVIOR" : "BLOCKED TRACKER") : "Blocked") :
                     !string.IsNullOrEmpty(r.TrackerLabel) ? (_expertMode ? "TRACKER" : "Tracker") : r.IsThirdParty ? (_expertMode ? "THIRD-PARTY" : "Other company") : (_expertMode ? "FIRST-PARTY" : "This site");
                 return new RequestListItem {
-                Host = r.Host, Path = r.Path.Length > 50 ? r.Path[..50] + "..." : r.Path, Method = r.Method,
+                Host = r.Host ?? "", Path = (r.Path?.Length ?? 0) > 50 ? r.Path![..50] + "..." : (r.Path ?? ""), Method = r.Method ?? "",
                 Status = r.IsBlocked ? "BLK" : r.StatusCode > 0 ? r.StatusCode.ToString() : "...",
                 TypeLabel = typeLabel,
                 TypeColor = r.IsBlocked ? new SolidColorBrush(Color.FromRgb(217, 48, 37)) :
@@ -2397,7 +2461,7 @@ namespace PrivacyMonitor
         {
             var items = new List<StorageListItem>();
             var setCookieNames = tab.Requests.SelectMany(r => r.ResponseHeaders.Where(h => h.Key.Equals("set-cookie", StringComparison.OrdinalIgnoreCase)))
-                .Select(h => h.Value.Split(';')[0].Split('=')[0].Trim()).Distinct().ToList();
+                .Select(h => (h.Value ?? "").Split(';')[0].Split('=')[0].Trim()).Where(s => s.Length > 0).Distinct().ToList();
             foreach (var c in tab.Cookies)
                 items.Add(new StorageListItem { Label = "CK", Name = c.Name, Store = "Cookie (JS)", Classification = c.Classification, ClassColor = ClassBrush(c.Classification), Size = c.Value.Length > 0 ? $"{c.Value.Length}ch" : "" });
             foreach (var n in setCookieNames.Where(n => !tab.Cookies.Any(c => c.Name == n)))
@@ -2752,20 +2816,21 @@ namespace PrivacyMonitor
                 else if (r.IsThirdParty) sb.AppendLine("[THIRD-PARTY]\n");
                 else sb.AppendLine("[FIRST-PARTY]\n");
 
-                if (r.Signals.Count > 0)
+                var sigList = r.Signals ?? new List<DetectionSignal>();
+                if (sigList.Count > 0)
                 {
                     sb.AppendLine("DETECTION SIGNALS:");
-                    foreach (var sig in r.Signals)
+                    foreach (var sig in sigList)
                         sb.AppendLine($"  [{sig.Confidence:F2}] {sig.SignalType}: {sig.Detail}");
                     sb.AppendLine();
                 }
-                if (r.DataClassifications.Count > 0) { sb.AppendLine("DATA TYPES:"); foreach (var d in r.DataClassifications) sb.AppendLine($"  {d}"); sb.AppendLine(); }
-                if (r.TrackingParams.Count > 0) { sb.AppendLine("TRACKING PARAMS:"); foreach (var p in r.TrackingParams) sb.AppendLine($"  {p}"); sb.AppendLine(); }
+                if (r.DataClassifications?.Count > 0) { sb.AppendLine("DATA TYPES:"); foreach (var d in r.DataClassifications) sb.AppendLine($"  {d}"); sb.AppendLine(); }
+                if (r.TrackingParams?.Count > 0) { sb.AppendLine("TRACKING PARAMS:"); foreach (var p in r.TrackingParams) sb.AppendLine($"  {p}"); sb.AppendLine(); }
                 sb.AppendLine($"{r.Method} {r.Path}\nHost: {r.Host}\nStatus: {(r.StatusCode > 0 ? r.StatusCode.ToString() : "pending")}\nType: {r.ResourceContext}\nTime: {r.Time:HH:mm:ss.fff}");
                 if (!string.IsNullOrEmpty(r.ContentType)) sb.AppendLine($"Content-Type: {r.ContentType}");
                 if (r.ResponseSize > 0) sb.AppendLine($"Response Size: {FormatBytes(r.ResponseSize)}");
-                if (r.RequestHeaders.Count > 0) { sb.AppendLine("\nREQUEST HEADERS:"); foreach (var kv in r.RequestHeaders.Take(15)) sb.AppendLine($"  {kv.Key}: {(kv.Value.Length > 120 ? kv.Value[..120] + "..." : kv.Value)}"); }
-                if (r.ResponseHeaders.Count > 0) { sb.AppendLine("\nRESPONSE HEADERS:"); foreach (var kv in r.ResponseHeaders.Take(15)) sb.AppendLine($"  {kv.Key}: {(kv.Value.Length > 120 ? kv.Value[..120] + "..." : kv.Value)}"); }
+                if (r.RequestHeaders?.Count > 0) { sb.AppendLine("\nREQUEST HEADERS:"); foreach (var kv in r.RequestHeaders.Take(15)) { var v = kv.Value ?? ""; sb.AppendLine($"  {kv.Key}: {(v.Length > 120 ? v[..120] + "..." : v)}"); } }
+                if (r.ResponseHeaders?.Count > 0) { sb.AppendLine("\nRESPONSE HEADERS:"); foreach (var kv in r.ResponseHeaders.Take(15)) { var v = kv.Value ?? ""; sb.AppendLine($"  {kv.Key}: {(v.Length > 120 ? v[..120] + "..." : v)}"); } }
             }
             else
             {
@@ -2786,9 +2851,9 @@ namespace PrivacyMonitor
                     sb.AppendLine($"{r.TrackerLabel}  ({cLabel})");
                     if (!string.IsNullOrEmpty(r.TrackerCompany)) sb.AppendLine($"Owned by: {r.TrackerCompany}");
                     sb.AppendLine();
-                    if (r.DataClassifications.Count > 0)
+                    if (r.DataClassifications?.Count > 0)
                         sb.AppendLine($"Collects: {string.Join(", ", r.DataClassifications)}");
-                    if (r.TrackingParams.Count > 0)
+                    if (r.TrackingParams?.Count > 0)
                         sb.AppendLine($"Tracking parameters found in URL ({r.TrackingParams.Count})");
                     sb.AppendLine($"\nSent to: {r.Host}");
                     if (r.HasBody) sb.AppendLine("Form data was sent to this server.");
@@ -2796,7 +2861,7 @@ namespace PrivacyMonitor
                 else if (r.IsThirdParty)
                 {
                     sb.AppendLine($"Third-party request to {r.Host}");
-                    if (r.DataClassifications.Count > 0) sb.AppendLine($"Data types: {string.Join(", ", r.DataClassifications)}");
+                    if (r.DataClassifications?.Count > 0) sb.AppendLine($"Data types: {string.Join(", ", r.DataClassifications)}");
                 }
                 else
                     sb.AppendLine($"First-party request to {r.Host}");
@@ -2813,7 +2878,7 @@ namespace PrivacyMonitor
             try
             {
                 var scan = BuildScanResult(tab); scan.ScanEnd = DateTime.Now;
-                scan.AllSignals = tab.Requests.SelectMany(r => r.Signals).ToList();
+                scan.AllSignals = tab.Requests.SelectMany(r => r.Signals ?? Enumerable.Empty<DetectionSignal>()).ToList();
                 scan.Score = PrivacyEngine.CalculateScore(scan); scan.GdprFindings = PrivacyEngine.MapToGdpr(scan);
                 var dlg = new SaveFileDialog { Filter = "HTML|*.html", FileName = $"privacy-audit-{tab.CurrentHost}-{DateTime.Now:yyyyMMdd-HHmmss}.html" };
                 if (dlg.ShowDialog() == true)
@@ -2834,8 +2899,10 @@ namespace PrivacyMonitor
                 var dlg = new SaveFileDialog { Filter = "PNG|*.png", FileName = $"screenshot-{tab.CurrentHost}-{DateTime.Now:yyyyMMdd-HHmmss}.png" };
                 if (dlg.ShowDialog() == true)
                 {
+                    var cw = tab.WebView?.CoreWebView2;
+                    if (cw == null) { ReportStatusText.Text = "WebView not available."; return; }
                     using var ms = new MemoryStream();
-                    await tab.WebView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, ms);
+                    await cw.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, ms);
                     ms.Seek(0, SeekOrigin.Begin); await using var fs = File.Create(dlg.FileName); await ms.CopyToAsync(fs);
                     ReportStatusText.Text = $"Saved: {dlg.FileName}";
                 }
@@ -2854,7 +2921,7 @@ namespace PrivacyMonitor
                     var sb = new StringBuilder();
                     sb.AppendLine("Time,Method,Host,Path,Status,ThirdParty,Tracker,TrackingParams,HasBody,DataTypes");
                     foreach (var r in tab.Requests)
-                        sb.AppendLine($"{r.Time:HH:mm:ss.fff},{r.Method},\"{r.Host}\",\"{r.Path.Replace("\"", "\"\"")}\",{r.StatusCode},{r.IsThirdParty},\"{r.TrackerLabel}\",\"{string.Join(";", r.TrackingParams)}\",{r.HasBody},\"{string.Join(";", r.DataClassifications)}\"");
+                        sb.AppendLine($"{r.Time:HH:mm:ss.fff},{r.Method ?? ""},\"{(r.Host ?? "").Replace("\"", "\"\"")}\",\"{(r.Path ?? "").Replace("\"", "\"\"")}\",{r.StatusCode},{r.IsThirdParty},\"{(r.TrackerLabel ?? "").Replace("\"", "\"\"")}\",\"{string.Join(";", r.TrackingParams is null ? Array.Empty<string>() : r.TrackingParams)}\",{r.HasBody},\"{string.Join(";", r.DataClassifications is null ? Array.Empty<string>() : r.DataClassifications)}\"");
                     File.WriteAllText(dlg.FileName, sb.ToString(), Encoding.UTF8);
                     ReportStatusText.Text = $"Exported: {dlg.FileName}";
                 }
@@ -2871,7 +2938,7 @@ namespace PrivacyMonitor
             if (tab?.IsReady == true)
             {
                 tab.LastActivityUtc = DateTime.UtcNow;
-                tab.WebView.CoreWebView2.GoBack();
+                tab.WebView?.CoreWebView2?.GoBack();
             }
         }
 
@@ -2881,7 +2948,7 @@ namespace PrivacyMonitor
             if (tab?.IsReady == true)
             {
                 tab.LastActivityUtc = DateTime.UtcNow;
-                tab.WebView.CoreWebView2.GoForward();
+                tab.WebView?.CoreWebView2?.GoForward();
             }
         }
 
@@ -2891,7 +2958,7 @@ namespace PrivacyMonitor
             if (tab?.IsReady == true)
             {
                 tab.LastActivityUtc = DateTime.UtcNow;
-                tab.WebView.CoreWebView2.Reload();
+                tab.WebView?.CoreWebView2?.Reload();
             }
         }
 
@@ -2945,7 +3012,7 @@ namespace PrivacyMonitor
             var tab = ActiveTab;
             if (tab?.IsReady != true) return;
             tab.LastActivityUtc = DateTime.UtcNow;
-            tab.WebView.CoreWebView2.NavigateToString(GetWelcomeHtml());
+            tab.WebView?.CoreWebView2?.NavigateToString(GetWelcomeHtml());
         }
 
         private void Star_Click(object sender, RoutedEventArgs e)
@@ -2953,7 +3020,7 @@ namespace PrivacyMonitor
             var tab = ActiveTab;
             var url = tab?.Url?.Trim() ?? "";
             if (string.IsNullOrEmpty(url) || url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)) return;
-            var title = (tab?.Title?.Trim() ?? "").Length > 0 ? tab!.Title.Trim() : new Uri(url).Host;
+            var title = (tab?.Title?.Trim() ?? "").Length > 0 ? tab!.Title.Trim() : (Uri.TryCreate(url, UriKind.Absolute, out var u) && u.IsAbsoluteUri ? (u.Host ?? "Page") : "Page");
             var existing = _bookmarks.FirstOrDefault(b => string.Equals(b.Url, url, StringComparison.OrdinalIgnoreCase));
             if (existing != null) { _bookmarks.Remove(existing); SaveBookmarks(); if (StatusText != null) StatusText.Text = "Bookmark removed."; }
             else { _bookmarks.Add(new BookmarkEntry { Title = title, Url = url }); SaveBookmarks(); if (StatusText != null) StatusText.Text = "Bookmark added."; }
@@ -3070,7 +3137,7 @@ namespace PrivacyMonitor
         {
             var tab = ActiveTab;
             if (tab?.IsReady != true) return;
-            try { tab.WebView.CoreWebView2.NavigateToString(GetHistoryHtml()); } catch { }
+            try { tab.WebView?.CoreWebView2?.NavigateToString(GetHistoryHtml()); } catch { }
         }
 
         private void MenuClearBrowsingHistory_Click(object sender, RoutedEventArgs e)
@@ -3080,7 +3147,7 @@ namespace PrivacyMonitor
             var tab = ActiveTab;
             if (tab?.IsReady == true)
             {
-                try { tab.WebView.CoreWebView2.NavigateToString(GetHistoryHtml()); } catch { }
+                try { tab.WebView?.CoreWebView2?.NavigateToString(GetHistoryHtml()); } catch { }
             }
             if (StatusText != null) StatusText.Text = "Browsing history cleared.";
         }
@@ -3100,11 +3167,11 @@ namespace PrivacyMonitor
             if (!Directory.Exists(downloads)) Directory.CreateDirectory(downloads);
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(downloads) { UseShellExecute = true }); } catch { }
         }
-        private void MenuZoomIn_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) tab.WebView.ZoomFactor = Math.Min(3.0, tab.WebView.ZoomFactor + 0.25); }
-        private void MenuZoomOut_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) tab.WebView.ZoomFactor = Math.Max(0.25, tab.WebView.ZoomFactor - 0.25); }
-        private void MenuZoomReset_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) tab.WebView.ZoomFactor = 1.0; }
-        private void MenuShortcuts_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) try { tab.WebView.CoreWebView2.NavigateToString(GetShortcutsHtml()); } catch { } }
-        private void MenuSettings_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) try { tab.WebView.CoreWebView2.NavigateToString(GetSettingsHtml()); } catch { } }
+        private void MenuZoomIn_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true && tab.WebView != null) tab.WebView.ZoomFactor = Math.Min(3.0, tab.WebView.ZoomFactor + 0.25); }
+        private void MenuZoomOut_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true && tab.WebView != null) tab.WebView.ZoomFactor = Math.Max(0.25, tab.WebView.ZoomFactor - 0.25); }
+        private void MenuZoomReset_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true && tab.WebView != null) tab.WebView.ZoomFactor = 1.0; }
+        private void MenuShortcuts_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) try { tab.WebView?.CoreWebView2?.NavigateToString(GetShortcutsHtml()); } catch { } }
+        private void MenuSettings_Click(object sender, RoutedEventArgs e) { var tab = ActiveTab; if (tab?.IsReady == true) try { tab.WebView?.CoreWebView2?.NavigateToString(GetSettingsHtml()); } catch { } }
         private void MenuAbout_Click(object sender, RoutedEventArgs e)
         {
             var ver = Assembly.GetExecutingAssembly().GetName().Version;
@@ -3194,7 +3261,7 @@ namespace PrivacyMonitor
             var tab = ActiveTab;
             if (tab?.IsReady == true)
             {
-                try { tab.WebView.CoreWebView2.Navigate(url); } catch { }
+                try { tab.WebView?.CoreWebView2?.Navigate(url); } catch { }
             }
         }
 
@@ -3278,6 +3345,13 @@ namespace PrivacyMonitor
             return false;
         }
 
+        /// <summary>Only http/https are allowed for navigation; javascript:, data:, file:, etc. are treated as search.</summary>
+        private static bool IsAllowedNavigationScheme(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return false;
+            return url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        }
+
         private void Navigate()
         {
             var tab = ActiveTab;
@@ -3304,10 +3378,21 @@ namespace PrivacyMonitor
                 url = input.Contains("://") ? input : "https://" + input;
             else
                 url = searchUrl + Uri.EscapeDataString(input);
+
+            if (!IsAllowedNavigationScheme(url))
+            {
+                url = searchUrl + Uri.EscapeDataString(input);
+            }
+
+            if (tab.WebView?.CoreWebView2 == null)
+            {
+                if (StatusText != null) StatusText.Text = "Browser is not ready. Try again in a moment.";
+                return;
+            }
             try
             {
                 tab.LastActivityUtc = DateTime.UtcNow;
-                tab.WebView.CoreWebView2.Navigate(url);
+                tab.WebView?.CoreWebView2?.Navigate(url);
             }
             catch (Exception ex)
             {
@@ -3320,9 +3405,10 @@ namespace PrivacyMonitor
         {
             var tab = ActiveTab;
             if (tab?.IsReady != true) return;
+            var cw = tab.WebView?.CoreWebView2;
+            if (cw == null) return;
             try
             {
-                var cw = tab.WebView.CoreWebView2;
                 var options = cw.Environment.CreateFindOptions();
                 options.FindTerm = "";
                 options.ShouldHighlightAllMatches = true;
@@ -3346,10 +3432,10 @@ namespace PrivacyMonitor
                     case Key.H: MenuHistory_Click(this, e); e.Handled = true; break;
                     case Key.L: AddressBar.Focus(); AddressBar.SelectAll(); e.Handled = true; break;
                     case Key.F: ShowFindInPage(); e.Handled = true; break;
-                    case Key.P: if (tab?.IsReady == true) { try { await tab.WebView.CoreWebView2.ExecuteScriptAsync("window.print()"); } catch { } } e.Handled = true; break;
-                    case Key.OemPlus: case Key.Add: if (tab?.IsReady == true) tab.WebView.ZoomFactor = Math.Min(3.0, tab.WebView.ZoomFactor + 0.1); e.Handled = true; break;
-                    case Key.OemMinus: case Key.Subtract: if (tab?.IsReady == true) tab.WebView.ZoomFactor = Math.Max(0.25, tab.WebView.ZoomFactor - 0.1); e.Handled = true; break;
-                    case Key.D0: case Key.NumPad0: if (tab?.IsReady == true) tab.WebView.ZoomFactor = 1.0; e.Handled = true; break;
+                    case Key.P: if (tab?.IsReady == true && tab.WebView?.CoreWebView2 is { } cwPrint) { try { await cwPrint.ExecuteScriptAsync("window.print()"); } catch { } } e.Handled = true; break;
+                    case Key.OemPlus: case Key.Add: if (tab?.IsReady == true && tab.WebView != null) tab.WebView.ZoomFactor = Math.Min(3.0, tab.WebView.ZoomFactor + 0.1); e.Handled = true; break;
+                    case Key.OemMinus: case Key.Subtract: if (tab?.IsReady == true && tab.WebView != null) tab.WebView.ZoomFactor = Math.Max(0.25, tab.WebView.ZoomFactor - 0.1); e.Handled = true; break;
+                    case Key.D0: case Key.NumPad0: if (tab?.IsReady == true && tab.WebView != null) tab.WebView.ZoomFactor = 1.0; e.Handled = true; break;
                     case Key.Tab:
                         if (_tabs.Count > 1) { int idx = _tabs.FindIndex(t => t.Id == _activeTabId);
                             int next = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? (idx - 1 + _tabs.Count) % _tabs.Count : (idx + 1) % _tabs.Count;
@@ -3418,10 +3504,11 @@ namespace PrivacyMonitor
  } catch(e){}
 })();
 ";
-                await tab.WebView.CoreWebView2.ExecuteScriptAsync(clearScript);
+                var cw = tab.WebView?.CoreWebView2;
+                if (cw != null) await cw.ExecuteScriptAsync(clearScript);
                 tab.Cookies.Clear();
                 tab.Storage.Clear();
-                try { await tab.WebView.CoreWebView2.ExecuteScriptAsync(PrivacyEngine.StorageEnumerationScript); } catch { }
+                try { if (cw != null) await cw.ExecuteScriptAsync(PrivacyEngine.StorageEnumerationScript); } catch { }
                 _dirty = true;
                 if (StatusText != null) StatusText.Text = "Cleared cookies and storage for this site.";
             }

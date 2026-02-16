@@ -79,12 +79,13 @@ namespace PrivacyMonitor
                 drained++;
 
                 // Track domain counts
-                DomainRequestCounts[entry.Host] = DomainRequestCounts.GetValueOrDefault(entry.Host) + 1;
+                var host = entry.Host ?? "";
+                DomainRequestCounts[host] = DomainRequestCounts.GetValueOrDefault(host) + 1;
 
                 // Track seen trackers
-                if (!string.IsNullOrEmpty(entry.TrackerLabel))
+                if (!string.IsNullOrEmpty(entry.TrackerLabel) && host.Length > 0)
                 {
-                    SeenTrackerDomains.Add(entry.Host);
+                    SeenTrackerDomains.Add(host);
                     if (!string.IsNullOrEmpty(entry.TrackerCompany))
                         SeenTrackerCompanies.Add(entry.TrackerCompany);
                 }

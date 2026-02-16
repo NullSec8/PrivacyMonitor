@@ -163,11 +163,11 @@ namespace PrivacyMonitor.NetworkInterceptor
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-        private void OnBatchRequestAdded(IReadOnlyList<InterceptedRequestItem> items)
+        private void OnBatchRequestAdded(IReadOnlyList<InterceptedRequestItem>? items)
         {
             _dispatcher.BeginInvoke(() =>
             {
-                if (_disposed || items.Count == 0) return;
+                if (_disposed || items == null || items.Count == 0) return;
                 foreach (var item in items)
                     Requests.Add(item);
                 StatusText = $"Capturing · {Requests.Count} requests";

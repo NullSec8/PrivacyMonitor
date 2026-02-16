@@ -92,7 +92,7 @@ namespace PrivacyMonitor
             catch { }
 
             // Cookie header values
-            if (req.RequestHeaders.TryGetValue("cookie", out var cookieStr))
+            if (req.RequestHeaders.TryGetValue("cookie", out var cookieStr) && !string.IsNullOrEmpty(cookieStr))
             {
                 foreach (var cookie in cookieStr.Split(';'))
                 {

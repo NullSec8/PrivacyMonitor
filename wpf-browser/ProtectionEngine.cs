@@ -167,7 +167,7 @@ namespace PrivacyMonitor
             }
 
             // 3) Known tracker detection (confidence-weighted) — stronger: lower thresholds block more
-            double trackerConfidence = MaxSignalConfidence(entry.Signals, "known_tracker", "heuristic_tracker");
+            double trackerConfidence = MaxSignalConfidence(entry.Signals ?? new List<DetectionSignal>(), "known_tracker", "heuristic_tracker");
             if (blockAdsTrackers && !string.IsNullOrEmpty(entry.TrackerLabel))
             {
                 if (mode == ProtectionMode.BlockKnown && trackerConfidence >= 0.28)
@@ -200,7 +200,7 @@ namespace PrivacyMonitor
             // 4) Behavioral blocking (JS injection / session replay signatures) — stronger threshold
             if (blockBehavioral)
             {
-                var behavioral = entry.Signals.FirstOrDefault(s =>
+                var behavioral = (entry.Signals ?? Enumerable.Empty<DetectionSignal>()).FirstOrDefault(s =>
                     s.SignalType == "js_injection" ||
                     s.SignalType == "session_replay" ||
                     s.SignalType == "behavioral_tracking");
@@ -222,7 +222,7 @@ namespace PrivacyMonitor
             {
                 if (isMedia)
                     return new BlockDecision { Blocked = false, Reason = "Media request" };
-                var heuristic = entry.Signals
+                var heuristic = (entry.Signals ?? Enumerable.Empty<DetectionSignal>())
                     .Where(s => s.SignalType == "high_entropy_param" ||
                                 s.SignalType == "pixel_tracking" ||
                                 s.SignalType == "obfuscated_payload" ||
@@ -419,8 +419,17 @@ namespace PrivacyMonitor
                 }
 
                 var json = File.ReadAllText(BlocklistPath);
-                var file = JsonSerializer.Deserialize<BlocklistFile>(json);
-                var entries = file?.Entries ?? JsonSerializer.Deserialize<List<BlocklistEntry>>(json) ?? new List<BlocklistEntry>();
+                if (string.IsNullOrWhiteSpace(json)) return;
+
+                List<BlocklistEntry>? entries = null;
+                try
+                {
+                    var file = JsonSerializer.Deserialize<BlocklistFile>(json);
+                    entries = file?.Entries ?? JsonSerializer.Deserialize<List<BlocklistEntry>>(json);
+                }
+                catch { return; }
+
+                if (entries == null) return;
 
                 _staticBlocklist.Clear();
                 foreach (var e in entries.Where(e => !string.IsNullOrWhiteSpace(e.Domain)))

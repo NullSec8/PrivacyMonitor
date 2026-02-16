@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
@@ -76,7 +77,7 @@ public static class UpdateService
             if (!response.IsSuccessStatusCode)
                 return (null, $"Server returned {(int)response.StatusCode} {response.ReasonPhrase}");
             var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            var doc = JsonDocument.Parse(json);
+            using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             var version = root.TryGetProperty("version", out var v) ? v.GetString() : null;
             if (string.IsNullOrWhiteSpace(version))
@@ -111,9 +112,18 @@ public static class UpdateService
         return CompareVersions(CurrentVersion, latest.Version) < 0;
     }
 
+    /// <summary>Returns true if the version string is safe for use in file paths (no path traversal).</summary>
+    private static bool IsSafeVersion(string? version)
+    {
+        if (string.IsNullOrEmpty(version) || version.Length > 64) return false;
+        return version.All(c => char.IsLetterOrDigit(c) || c == '.' || c == '-');
+    }
+
     /// <summary>Downloads the update zip and returns (extract folder path, or null) and optional error message.</summary>
     public static async Task<(string? extractDir, string? errorMessage)> DownloadUpdateAsync(string version, IProgress<double>? progress, CancellationToken ct = default)
     {
+        if (!IsSafeVersion(version))
+            return (null, "Invalid version format from server.");
         try
         {
             var url = $"{BaseUrl}/api/download/{version}?platform=win64";
@@ -190,9 +200,11 @@ public static class UpdateService
         var psi = new ProcessStartInfo
         {
             FileName = exePath,
-            Arguments = $"--apply-update \"{exePath}\" \"{currentExe}\"",
             UseShellExecute = false,
         };
+        psi.ArgumentList.Add("--apply-update");
+        psi.ArgumentList.Add(exePath);
+        psi.ArgumentList.Add(currentExe);
         Process.Start(psi);
     }
 
@@ -206,15 +218,28 @@ public static class UpdateService
         var args = Environment.GetCommandLineArgs();
         if (args.Length < 4 || args[1] != "--apply-update") return false;
         var newExe = args[2];
-        var currentExe = args[3];
+        var currentExeArg = args[3];
         if (!File.Exists(newExe)) return true;
+
+        // Only allow overwriting the actual running process path (prevent arbitrary file overwrite).
+        var realCurrentExe = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "PrivacyMonitor.exe");
+        if (string.IsNullOrEmpty(realCurrentExe)) return true;
+        try
+        {
+            var realFull = Path.GetFullPath(realCurrentExe);
+            var argFull = Path.GetFullPath(currentExeArg);
+            if (!string.Equals(realFull, argFull, StringComparison.OrdinalIgnoreCase))
+                return true; // Mismatch: ignore and continue normal startup (do not copy over a different file).
+        }
+        catch { return true; }
+
         try
         {
             Thread.Sleep(1500);
-            File.Copy(newExe, currentExe, true);
+            File.Copy(newExe, realCurrentExe, true);
             Process.Start(new ProcessStartInfo
             {
-                FileName = currentExe,
+                FileName = realCurrentExe,
                 UseShellExecute = true,
             });
             success = true;

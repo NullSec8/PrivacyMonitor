@@ -231,7 +231,8 @@ namespace PrivacyMonitor.NetworkInterceptor
             if (!responseHeaders.TryGetValue("set-cookie", out var setCookie) || string.IsNullOrWhiteSpace(setCookie))
                 return;
 
-            var parts = setCookie.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToList();
+            var parts = setCookie.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+            if (parts.Count == 0) return;
             var flags = new HashSet<string>(parts.Select(p => p.Split('=')[0].Trim()), StringComparer.OrdinalIgnoreCase);
 
             bool missingSecure = !flags.Contains("Secure");

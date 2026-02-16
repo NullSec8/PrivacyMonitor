@@ -821,13 +821,13 @@ namespace PrivacyMonitor
 
             // 2) Tracking URL parameters
             req.TrackingParams = DetectTrackingParams(req.FullUrl);
-            if (req.TrackingParams.Count > 0)
+            if (req.TrackingParams != null && req.TrackingParams.Count > 0)
             {
                 signals.Add(new DetectionSignal
                 {
                     SignalType = "tracking_param",
                     Source = req.Host,
-                    Detail = $"{req.TrackingParams.Count} tracking parameter(s): {string.Join(", ", req.TrackingParams.Take(5).Select(p => p.Split('=')[0]))}",
+                    Detail = $"{req.TrackingParams.Count} tracking parameter(s): {string.Join(", ", req.TrackingParams.Take(5).Select(p => (p ?? "").Split('=')[0]))}",
                     Confidence = 0.90,
                     Risk = RiskType.Tracking,
                     Severity = 3,
@@ -911,7 +911,8 @@ namespace PrivacyMonitor
         {
             try
             {
-                var uri = new Uri(req.FullUrl);
+                if (string.IsNullOrEmpty(req?.FullUrl)) return;
+                if (!Uri.TryCreate(req.FullUrl, UriKind.Absolute, out var uri) || !uri.IsAbsoluteUri) return;
                 if (string.IsNullOrEmpty(uri.Query)) return;
                 foreach (var pair in uri.Query.TrimStart('?').Split('&'))
                 {
@@ -1041,10 +1042,10 @@ namespace PrivacyMonitor
             if (!req.RequestHeaders.TryGetValue("cookie", out var cookieVal)) return;
             if (string.IsNullOrWhiteSpace(cookieVal)) return;
 
-            bool hasIds = req.TrackingParams.Count > 0 ||
+            bool hasIds = (req.TrackingParams?.Count ?? 0) > 0 ||
                           signals.Any(s => s.SignalType == "high_entropy_param") ||
-                          req.Path.Contains("sync", StringComparison.OrdinalIgnoreCase) ||
-                          req.Path.Contains("match", StringComparison.OrdinalIgnoreCase);
+                          (req.Path?.Contains("sync", StringComparison.OrdinalIgnoreCase) ?? false) ||
+                          (req.Path?.Contains("match", StringComparison.OrdinalIgnoreCase) ?? false);
 
             if (hasIds)
             {
@@ -1130,7 +1131,7 @@ namespace PrivacyMonitor
             int jsTracking = scan.Cookies.Count(c => c.Classification == "Tracking / Analytics");
             var setCookieNames = scan.Requests
                 .SelectMany(r => r.ResponseHeaders.Where(h => h.Key.Equals("set-cookie", StringComparison.OrdinalIgnoreCase))
-                    .Select(h => h.Value.Split(';')[0].Split('=')[0].Trim()))
+                    .Select(h => (h.Value ?? "").Split(';')[0].Split('=')[0].Trim()).Where(s => s.Length > 0))
                 .Distinct().Where(n => !scan.Cookies.Any(c => c.Name == n))
                 .Count(n => ClassifyCookie(n) == "Tracking / Analytics");
             return jsTracking + setCookieNames;
@@ -1144,13 +1145,14 @@ namespace PrivacyMonitor
         {
             var tags = new List<string>();
             var headers = req.RequestHeaders;
+            if (headers == null) return tags;
             if (headers.Any(h => h.Key.Equals("cookie", StringComparison.OrdinalIgnoreCase))) tags.Add("Cookies (identity)");
             if (headers.Any(h => h.Key.Equals("authorization", StringComparison.OrdinalIgnoreCase))) tags.Add("Authentication credentials");
             if (headers.Any(h => h.Key.Equals("referer", StringComparison.OrdinalIgnoreCase))) tags.Add("Browsing history (referer)");
             if (headers.Any(h => h.Key.Equals("user-agent", StringComparison.OrdinalIgnoreCase))) tags.Add("Device/browser info");
-            if (req.TrackingParams.Count > 0) tags.Add("Cross-site tracking IDs");
+            if ((req.TrackingParams?.Count ?? 0) > 0) tags.Add("Cross-site tracking IDs");
             if (req.HasBody) tags.Add("Form/POST data");
-            var url = req.FullUrl.ToLowerInvariant();
+            var url = (req.FullUrl ?? "").ToLowerInvariant();
             if (url.Contains("geo") || url.Contains("location") || url.Contains("lat=") || url.Contains("lng=")) tags.Add("Location data");
             if (url.Contains("email") || url.Contains("phone") || url.Contains("name=") || url.Contains("address")) tags.Add("Possible PII");
             return tags;
@@ -1341,7 +1343,7 @@ namespace PrivacyMonitor
             breakdown["Tracking cookies"] = -cookiePenalty;
 
             // ── Tracking params: diminishing ──
-            int paramTotal = scan.Requests.Sum(r => r.TrackingParams.Count);
+            int paramTotal = scan.Requests.Sum(r => r.TrackingParams?.Count ?? 0);
             int paramPenalty = (int)Math.Min(15, 3 * Math.Sqrt(paramTotal));
             score -= paramPenalty; catScores["Tracking"] -= paramPenalty;
             breakdown["Tracking URL params"] = -paramPenalty;
@@ -1365,7 +1367,7 @@ namespace PrivacyMonitor
             // ── Excessive cookies ──
             int totalCookies = scan.Cookies.Count + scan.Requests
                 .SelectMany(r => r.ResponseHeaders.Where(h => h.Key.Equals("set-cookie", StringComparison.OrdinalIgnoreCase)))
-                .Select(h => h.Value.Split(';')[0].Split('=')[0].Trim()).Distinct().Count();
+                .Select(h => (h.Value ?? "").Split(';')[0].Split('=')[0].Trim()).Where(s => s.Length > 0).Distinct().Count();
             int excessPenalty = totalCookies > 20 ? 10 : totalCookies > 10 ? 5 : 0;
             score -= excessPenalty;
             if (excessPenalty > 0) breakdown["Excessive cookies"] = -excessPenalty;
