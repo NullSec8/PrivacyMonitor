@@ -3,12 +3,8 @@
   "version": "1.0.0",
   "description": "Hosts browser builds and provides update/install-log API",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "engines": {
-    "node": ">=18"
-  },
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
   "dependencies": {
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.6",
@@ -17,5 +13,8 @@
     "morgan": "^1.10.0",
     "qrcode": "^1.5.4",
     "speakeasy": "^2.0.0"
+  },
+  "overrides": {
+    "tar": "^7.5.7"
   }
 }

@@ -8,8 +8,8 @@ $REMOTE_BASE = "/home/$VPS_USER/browser_project"
 
 # What to deploy (set $true to include)
 $DeployWebsite = $true
-$DeployServer  = $false
-$DeployBuilds  = $false
+$DeployServer  = $true
+$DeployBuilds  = $true
 
 # Paths (relative to this script's directory = work)
 $WebsitePath = "wpf-browser\website"

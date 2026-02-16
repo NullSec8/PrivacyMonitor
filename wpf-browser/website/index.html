@@ -3,9 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Privacy Monitor - Know what websites know about you</title>
+  <title>Privacy Monitor — Know what websites know about you</title>
+  <meta name="description" content="Windows privacy diagnostic browser. Detect trackers, fingerprinting, and export GDPR-style audits. Built with WPF and WebView2.">
   <link rel="icon" href="assets/logo.png">
-  <link rel="stylesheet" href="assets/styles.css?v=3">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css?v=5">
 </head>
 <body>
   <nav class="nav">
@@ -19,6 +23,7 @@
         <a href="features.html">Features</a>
         <a href="download.html">Download</a>
         <a href="security.html">Security & Privacy</a>
+        <a href="https://github.com/NullSec8/PrivacyMonitor" target="_blank" rel="noopener noreferrer" class="nav-gh">GitHub</a>
       </div>
     </div>
   </nav>
@@ -29,9 +34,16 @@
         <span class="badge">Windows 10/11</span>
         <span class="badge">Privacy-first</span>
         <h1>Know what websites know about you.</h1>
-        <p>Privacy Monitor is a Windows browser built for privacy: it detects trackers, blocks invasive scripts, and explains risks in real time.</p>
+        <p>A diagnostic browser that reveals trackers, fingerprinting, and data flows in real time — with privacy scores, blocking, and GDPR-ready reports.</p>
         <a class="cta" href="download.html">Download for Windows</a>
-        <p class="muted">Self-contained EXE. No .NET required.</p>
+        <p class="muted">Self-contained EXE · No .NET required · Free & open source</p>
+        <div class="trust-strip">
+          <span class="trust-item">Open source</span>
+          <span class="trust-dot" aria-hidden="true"></span>
+          <span class="trust-item">Local-only analysis</span>
+          <span class="trust-dot" aria-hidden="true"></span>
+          <span class="trust-item">No telemetry</span>
+        </div>
       </div>
       <div class="hero-card">
         <img class="logo" src="assets/logo.png" alt="Privacy Monitor">
@@ -46,12 +58,12 @@
       <h2 class="reveal">Key capabilities</h2>
       <p class="reveal stagger-1">Built for researchers, regulators, and anyone who cares about what sites do behind the scenes.</p>
       <div class="features">
-        <div class="feature-card fade-in stagger-1"><div class="icon">S</div><h4>Privacy Score</h4><p>0-100 scoring with a grade and a category breakdown.</p></div>
-        <div class="feature-card fade-in stagger-2"><div class="icon">T</div><h4>Tracker Detection</h4><p>Known trackers, heuristic detection, and adaptive learning.</p></div>
-        <div class="feature-card fade-in stagger-3"><div class="icon">F</div><h4>Anti-Fingerprinting</h4><p>Canvas, WebGL, audio, and device probing protections.</p></div>
-        <div class="feature-card fade-in stagger-4"><div class="icon">B</div><h4>Blocking Engine</h4><p>Static blocklist + confidence-weighted active blocking.</p></div>
-        <div class="feature-card fade-in stagger-5"><div class="icon">G</div><h4>GDPR Reports</h4><p>Export audit-ready HTML and CSV evidence.</p></div>
-        <div class="feature-card fade-in stagger-6"><div class="icon">L</div><h4>Forensic Logging</h4><p>Identity stitching, request bursts, and timeline evidence.</p></div>
+        <div class="feature-card fade-in stagger-1"><div class="icon" title="Score">📊</div><h4>Privacy Score</h4><p>0–100 scoring with a letter grade and category breakdown.</p></div>
+        <div class="feature-card fade-in stagger-2"><div class="icon" title="Tracker">🔍</div><h4>Tracker Detection</h4><p>Known trackers, heuristic detection, and adaptive learning.</p></div>
+        <div class="feature-card fade-in stagger-3"><div class="icon" title="Fingerprint">🛡️</div><h4>Anti-Fingerprinting</h4><p>Canvas, WebGL, audio, and device probing protections.</p></div>
+        <div class="feature-card fade-in stagger-4"><div class="icon" title="Block">🚫</div><h4>Blocking Engine</h4><p>Static blocklist and confidence-weighted active blocking.</p></div>
+        <div class="feature-card fade-in stagger-5"><div class="icon" title="Report">📋</div><h4>GDPR Reports</h4><p>Export audit-ready HTML and CSV evidence.</p></div>
+        <div class="feature-card fade-in stagger-6"><div class="icon" title="Forensics">📁</div><h4>Forensic Logging</h4><p>Identity stitching, request bursts, and timeline evidence.</p></div>
       </div>
     </div>
   </section>
@@ -60,19 +72,25 @@
     <div class="container">
       <h2 class="reveal">App UI preview</h2>
       <p class="reveal stagger-1">Starting page and Dashboard.</p>
-      <div class="carousel fade-in">
-        <div class="carousel-track">
-          <div class="carousel-slide">
-            <img src="assets/screens/starting.png" alt="Starting page">
-          </div>
-          <div class="carousel-slide">
-            <img src="assets/screens/dashboard.png" alt="Dashboard panel">
+      <div class="carousel-wrap fade-in">
+        <div class="carousel" role="region" aria-label="Screenshots">
+          <div class="carousel-track">
+            <div class="carousel-slide">
+              <img src="assets/screens/starting.png" alt="Starting page">
+            </div>
+            <div class="carousel-slide">
+              <img src="assets/screens/dashboard.png" alt="Dashboard panel">
+            </div>
           </div>
         </div>
-      </div>
-      <div class="carousel-controls">
-        <button class="carousel-btn" data-carousel-prev>Prev</button>
-        <button class="carousel-btn" data-carousel-next>Next</button>
+        <div class="carousel-controls">
+          <button type="button" class="carousel-btn" data-carousel-prev aria-label="Previous">← Prev</button>
+          <div class="carousel-dots" role="tablist" aria-label="Slide">
+            <button type="button" class="carousel-dot active" data-carousel-dot="0" aria-label="Slide 1" aria-selected="true"></button>
+            <button type="button" class="carousel-dot" data-carousel-dot="1" aria-label="Slide 2" aria-selected="false"></button>
+          </div>
+          <button type="button" class="carousel-btn" data-carousel-next aria-label="Next">Next →</button>
+        </div>
       </div>
     </div>
   </section>
@@ -81,9 +99,11 @@
     <div class="container footer-inner">
       <div class="footer-links">
         <a href="features.html">Features</a>
+        <a href="download.html">Download</a>
         <a href="security.html">Security & Privacy</a>
+        <a href="https://github.com/NullSec8/PrivacyMonitor" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
       </div>
-      <div>© 2026 Privacy Monitor</div>
+      <div>© 2026 Privacy Monitor · MIT License</div>
     </div>
   </footer>
 
