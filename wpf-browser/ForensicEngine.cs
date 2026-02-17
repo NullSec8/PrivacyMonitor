@@ -14,6 +14,15 @@ namespace PrivacyMonitor
     /// </summary>
     public class ForensicEngine
     {
+        // Known tracking param names: accept with lower entropy/length bar for stronger detection
+        private static readonly HashSet<string> KnownTrackingParams = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "gclid", "gclsrc", "dclid", "gbraid", "wbraid", "fbclid", "fb_action_ids", "fb_action_types",
+            "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "_ga", "mc_cid", "mc_eid",
+            "ttclid", "twclid", "li_fat_id", "msclkid", "irclickid", "epik", "ref", "ref_src", "ref_click_id",
+            "s_kwcid", "oly_anon_id", "oly_enc_id", "_hsenc", "_hsmi", "mkt_tok", "trk", "trkContact", "sc_cid"
+        };
+
         // ════════════════════════════════════════════
         //  IDENTIFIER REGISTRY (per-tab, thread-safe via UI drain)
         // ════════════════════════════════════════════
@@ -66,42 +75,59 @@ namespace PrivacyMonitor
         /// <summary>
         /// Extract candidate identifiers from a request: URL params, Cookie header, Referer params.
         /// Returns key-value pairs where value has sufficient entropy to be a tracking ID.
+        /// Stronger: known tracking param names accepted with lower bar; Referer query parsed.
         /// </summary>
         private static List<(string Key, string Value)> ExtractIdentifiers(RequestEntry req)
         {
             var ids = new List<(string, string)>();
 
-            // URL parameters
-            try
+            // URL parameters (parse query without Uri for speed)
+            if (!string.IsNullOrEmpty(req.FullUrl))
             {
-                var uri = new Uri(req.FullUrl);
-                if (!string.IsNullOrEmpty(uri.Query))
+                int q = req.FullUrl.IndexOf('?');
+                if (q >= 0 && q < req.FullUrl.Length - 1)
                 {
-                    foreach (var pair in uri.Query.TrimStart('?').Split('&'))
+                    string query = req.FullUrl.Substring(q + 1);
+                    foreach (var pair in query.Split('&'))
                     {
-                        var parts = pair.Split('=', 2);
-                        if (parts.Length == 2 && parts[1].Length >= 12)
+                        int eq = pair.IndexOf('=');
+                        if (eq > 0 && eq < pair.Length - 1)
                         {
-                            double entropy = PrivacyEngine.ShannonEntropy(parts[1]);
-                            if (entropy >= 3.5 || IsLikelyTrackingId(parts[1]))
-                                ids.Add((parts[0], parts[1]));
+                            string key = pair.Substring(0, eq).Trim();
+                            string val = pair.Substring(eq + 1).Trim();
+                            if (val.Length >= 8 && AcceptParamValue(key, val, isCookie: false))
+                                ids.Add((key, val));
                         }
                     }
                 }
             }
-            catch { }
 
-            // Cookie header values
-            if (req.RequestHeaders.TryGetValue("cookie", out var cookieStr) && !string.IsNullOrEmpty(cookieStr))
+            // Cookie header values (slightly lower bar 3.6 for stronger detection)
+            if (req.RequestHeaders.TryGetValue("cookie", out var cookieStr))
             {
                 foreach (var cookie in cookieStr.Split(';'))
                 {
                     var parts = cookie.Trim().Split('=', 2);
-                    if (parts.Length == 2 && parts[1].Length >= 12)
+                    if (parts.Length == 2)
                     {
-                        double entropy = PrivacyEngine.ShannonEntropy(parts[1]);
-                        if (entropy >= 3.8)
-                            ids.Add(($"cookie:{parts[0].Trim()}", parts[1].Trim()));
+                        var v = parts[1].Trim();
+                        if (v.Length >= 10 && AcceptParamValue("cookie", v, isCookie: true))
+                            ids.Add(($"cookie:{parts[0].Trim()}", v));
+                    }
+                }
+            }
+
+            // Referer URL params: same identifiers can appear in redirect URLs
+            if (req.RequestHeaders.TryGetValue("referer", out var referer) && !string.IsNullOrEmpty(referer))
+            {
+                int rq = referer.IndexOf('?');
+                if (rq >= 0 && rq < referer.Length - 1)
+                {
+                    foreach (var pair in referer.Substring(rq + 1).Split('&'))
+                    {
+                        var parts = pair.Split('=', 2);
+                        if (parts.Length == 2 && parts[1].Length >= 8 && AcceptParamValue(parts[0], parts[1], isCookie: false))
+                            ids.Add(($"ref_param:{parts[0]}", parts[1]));
                     }
                 }
             }
@@ -109,15 +135,28 @@ namespace PrivacyMonitor
             return ids;
         }
 
+        private static bool AcceptParamValue(string paramName, string value, bool isCookie)
+        {
+            bool knownTracking = !isCookie && KnownTrackingParams.Contains(paramName);
+            if (knownTracking && value.Length >= 8)
+                return true;
+            if (value.Length < 12) return false;
+            double entropy = PrivacyEngine.ShannonEntropy(value);
+            if (isCookie)
+                return entropy >= 3.6;
+            return entropy >= 3.5 || IsLikelyTrackingId(value);
+        }
+
         private static readonly Regex UuidPattern = new(@"^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex GaPattern = new(@"^GA\d\.\d\.\d+\.\d+$", RegexOptions.Compiled);
+        private static readonly Regex HighEntropyIdPattern = new(@"^[A-Za-z0-9+/=_-]{20,}$", RegexOptions.Compiled);
 
         private static bool IsLikelyTrackingId(string value)
         {
+            if (value.Length < 20) return false;
             if (UuidPattern.IsMatch(value)) return true;
             if (GaPattern.IsMatch(value)) return true;
-            // Long hex or base64 strings
-            if (value.Length >= 20 && Regex.IsMatch(value, @"^[A-Za-z0-9+/=_-]+$") && PrivacyEngine.ShannonEntropy(value) >= 3.2)
+            if (HighEntropyIdPattern.IsMatch(value) && PrivacyEngine.ShannonEntropy(value) >= 3.2)
                 return true;
             return false;
         }
@@ -127,26 +166,38 @@ namespace PrivacyMonitor
         // ════════════════════════════════════════════
 
         /// <summary>
-        /// Analyze a request for data flow indicators (referer chains, cookie propagation)
-        /// and add edges to the data flow graph.
+        /// Analyze a request for data flow indicators (referer, origin, cookie propagation, redirects).
+        /// Pass edgeLookup for O(1) add/update; otherwise linear search (slower with many edges).
         /// </summary>
         public static void AnalyzeDataFlow(
             RequestEntry req,
             string pageHost,
             List<DataFlowEdge> edges,
-            List<ForensicEvent> timeline)
+            List<ForensicEvent> timeline,
+            Dictionary<string, DataFlowEdge>? edgeLookup = null)
         {
             // Referer-based flow: if referer domain differs from request domain
-            if (req.RequestHeaders.TryGetValue("referer", out var referer))
+            if (req.RequestHeaders.TryGetValue("referer", out var referer) && referer.Length > 0)
             {
                 try
                 {
                     var refUri = new Uri(referer);
-                    if (!refUri.Host.Equals(req.Host, StringComparison.OrdinalIgnoreCase))
-                    {
-                        AddOrUpdateEdge(edges, refUri.Host, req.Host, "referer",
-                            $"Referer from {refUri.Host} to {req.Host}");
-                    }
+                    string refHost = refUri.Host;
+                    if (refHost.Length > 0 && !refHost.Equals(req.Host, StringComparison.OrdinalIgnoreCase))
+                        AddOrUpdateEdge(edges, refHost, req.Host, "referer", $"Referer from {refHost} to {req.Host}", edgeLookup);
+                }
+                catch { }
+            }
+
+            // Origin header: explicit first-party -> third-party flow (stronger signal)
+            if (req.RequestHeaders.TryGetValue("origin", out var origin) && origin.Length > 0)
+            {
+                try
+                {
+                    var originUri = new Uri(origin);
+                    string originHost = originUri.Host;
+                    if (originHost.Length > 0 && !originHost.Equals(req.Host, StringComparison.OrdinalIgnoreCase))
+                        AddOrUpdateEdge(edges, originHost, req.Host, "origin", $"Origin {originHost} to {req.Host}", edgeLookup);
                 }
                 catch { }
             }
@@ -154,23 +205,20 @@ namespace PrivacyMonitor
             // Page -> third-party flow
             if (req.IsThirdParty && !string.IsNullOrEmpty(pageHost))
             {
-                string mechanism = req.HasBody ? "post_data" : "get_request";
-                if (req.RequestHeaders.ContainsKey("cookie")) mechanism = "cookie_propagation";
-                AddOrUpdateEdge(edges, pageHost, req.Host, mechanism,
-                    $"{pageHost} sends data to {req.Host} via {mechanism}");
+                string mechanism = req.RequestHeaders.ContainsKey("cookie") ? "cookie_propagation" : (req.HasBody ? "post_data" : "get_request");
+                AddOrUpdateEdge(edges, pageHost, req.Host, mechanism, $"{pageHost} sends data to {req.Host} via {mechanism}", edgeLookup);
             }
 
             // Redirect flow (detected by 3xx status from a different domain)
             if (req.StatusCode >= 300 && req.StatusCode < 400 &&
-                req.ResponseHeaders.TryGetValue("location", out var location))
+                req.ResponseHeaders.TryGetValue("location", out var location) && location.Length > 0)
             {
                 try
                 {
                     var locUri = new Uri(location, UriKind.RelativeOrAbsolute);
-                    if (locUri.IsAbsoluteUri && !locUri.Host.Equals(req.Host, StringComparison.OrdinalIgnoreCase))
+                    if (locUri.IsAbsoluteUri && !string.IsNullOrEmpty(locUri.Host) && !locUri.Host.Equals(req.Host, StringComparison.OrdinalIgnoreCase))
                     {
-                        AddOrUpdateEdge(edges, req.Host, locUri.Host, "redirect_bounce",
-                            $"Redirect from {req.Host} to {locUri.Host} (HTTP {req.StatusCode})");
+                        AddOrUpdateEdge(edges, req.Host, locUri.Host, "redirect_bounce", $"Redirect from {req.Host} to {locUri.Host} (HTTP {req.StatusCode})", edgeLookup);
                         timeline.Add(new ForensicEvent
                         {
                             Time = req.Time,
@@ -185,21 +233,41 @@ namespace PrivacyMonitor
             }
         }
 
-        private static void AddOrUpdateEdge(List<DataFlowEdge> edges, string from, string to, string mechanism, string detail)
+        private static void AddOrUpdateEdge(List<DataFlowEdge> edges, string from, string to, string mechanism, string detail, Dictionary<string, DataFlowEdge>? edgeLookup)
         {
-            var existing = edges.FirstOrDefault(e =>
-                e.FromDomain.Equals(from, StringComparison.OrdinalIgnoreCase) &&
-                e.ToDomain.Equals(to, StringComparison.OrdinalIgnoreCase) &&
-                e.Mechanism == mechanism);
-            if (existing != null)
-                existing.Occurrences++;
-            else
-                edges.Add(new DataFlowEdge { FromDomain = from, ToDomain = to, Mechanism = mechanism, Detail = detail, FirstSeen = DateTime.Now, Occurrences = 1 });
+            if (edgeLookup != null)
+            {
+                string key = from.ToLowerInvariant() + "|" + to.ToLowerInvariant() + "|" + mechanism;
+                if (edgeLookup.TryGetValue(key, out var existing))
+                {
+                    existing.Occurrences++;
+                    return;
+                }
+                var edge = new DataFlowEdge { FromDomain = from, ToDomain = to, Mechanism = mechanism, Detail = detail, FirstSeen = DateTime.Now, Occurrences = 1 };
+                edges.Add(edge);
+                edgeLookup[key] = edge;
+                return;
+            }
+            for (int i = 0; i < edges.Count; i++)
+            {
+                var e = edges[i];
+                if (e.FromDomain.Equals(from, StringComparison.OrdinalIgnoreCase) && e.ToDomain.Equals(to, StringComparison.OrdinalIgnoreCase) && e.Mechanism == mechanism)
+                {
+                    e.Occurrences++;
+                    return;
+                }
+            }
+            edges.Add(new DataFlowEdge { FromDomain = from, ToDomain = to, Mechanism = mechanism, Detail = detail, FirstSeen = DateTime.Now, Occurrences = 1 });
         }
 
         // ════════════════════════════════════════════
         //  BEHAVIORAL FINGERPRINT ANALYSIS
         // ════════════════════════════════════════════
+
+        private static readonly HashSet<string> PassiveFingerprintTypes = new(StringComparer.OrdinalIgnoreCase)
+            { "Navigator Fingerprinting", "Screen Fingerprinting", "Network Fingerprinting", "Timezone Fingerprinting", "Plugin Fingerprinting" };
+        private static readonly HashSet<string> ActiveFingerprintTypes = new(StringComparer.OrdinalIgnoreCase)
+            { "Canvas Fingerprinting", "WebGL Fingerprinting", "Audio Fingerprinting" };
 
         /// <summary>
         /// Analyze timing patterns of fingerprint detections to identify
@@ -211,62 +279,78 @@ namespace PrivacyMonitor
             if (fingerprints.Count < 2) return patterns;
 
             var sorted = fingerprints.OrderBy(f => f.Time).ToList();
+            const double batteryWindowSeconds = 2.0;
 
-            // Detect fingerprint battery: 3+ techniques within 2 seconds
+            // Fingerprint battery: sliding window (index-based, no Skip/TakeWhile allocations)
             for (int i = 0; i < sorted.Count; i++)
             {
-                var window = sorted.Skip(i).TakeWhile(f => (f.Time - sorted[i].Time).TotalSeconds <= 2.0).ToList();
-                if (window.Count >= 3)
+                int j = i;
+                var typesInWindow = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                while (j < sorted.Count && (sorted[j].Time - sorted[i].Time).TotalSeconds <= batteryWindowSeconds)
                 {
-                    var types = window.Select(w => w.Type).Distinct().ToList();
-                    if (types.Count >= 3)
+                    typesInWindow.Add(sorted[j].Type);
+                    j++;
+                }
+                if (typesInWindow.Count >= 3)
+                {
+                    double windowMs = (sorted[j - 1].Time - sorted[i].Time).TotalMilliseconds;
+                    patterns.Add(new BehavioralPattern
                     {
-                        patterns.Add(new BehavioralPattern
-                        {
-                            Name = "Fingerprint Battery",
-                            Detail = $"{types.Count} fingerprinting techniques fired within {(window.Last().Time - window.First().Time).TotalMilliseconds:F0}ms: {string.Join(", ", types)}",
-                            TechniqueCount = types.Count,
-                            WindowMs = (int)(window.Last().Time - window.First().Time).TotalMilliseconds,
-                            Confidence = Math.Min(1.0, 0.6 + types.Count * 0.08),
-                            Severity = 5,
-                            Techniques = types
-                        });
-                        break; // one battery detection is sufficient
-                    }
+                        Name = "Fingerprint Battery",
+                        Detail = $"{typesInWindow.Count} fingerprinting techniques fired within {windowMs:F0}ms: {string.Join(", ", typesInWindow)}",
+                        TechniqueCount = typesInWindow.Count,
+                        WindowMs = (int)windowMs,
+                        Confidence = Math.Min(1.0, 0.6 + typesInWindow.Count * 0.08),
+                        Severity = 5,
+                        Techniques = typesInWindow.ToList()
+                    });
+                    break;
                 }
             }
 
-            // Detect passive probing: Navigator + Screen + Connection in sequence
-            var passiveTypes = new HashSet<string> { "Navigator Fingerprinting", "Screen Fingerprinting", "Network Fingerprinting", "Timezone Fingerprinting", "Plugin Fingerprinting" };
-            var passiveHits = sorted.Where(f => passiveTypes.Contains(f.Type)).ToList();
-            if (passiveHits.Count >= 3)
+            // Passive probe: single pass over sorted
+            int passiveCount = 0;
+            var passiveDistinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < sorted.Count; i++)
             {
+                if (PassiveFingerprintTypes.Contains(sorted[i].Type))
+                {
+                    passiveCount++;
+                    passiveDistinct.Add(sorted[i].Type);
+                }
+            }
+            if (passiveCount >= 3)
                 patterns.Add(new BehavioralPattern
                 {
                     Name = "Passive Fingerprint Probe",
-                    Detail = $"{passiveHits.Count} passive fingerprinting APIs accessed — building device profile without active rendering",
-                    TechniqueCount = passiveHits.Count,
+                    Detail = $"{passiveCount} passive fingerprinting APIs accessed — building device profile without active rendering",
+                    TechniqueCount = passiveCount,
                     Confidence = 0.80,
                     Severity = 4,
-                    Techniques = passiveHits.Select(p => p.Type).Distinct().ToList()
+                    Techniques = passiveDistinct.ToList()
                 });
-            }
 
-            // Detect active rendering probe: Canvas + WebGL + Audio
-            var activeTypes = new HashSet<string> { "Canvas Fingerprinting", "WebGL Fingerprinting", "Audio Fingerprinting" };
-            var activeHits = sorted.Where(f => activeTypes.Contains(f.Type)).ToList();
-            if (activeHits.Count >= 2)
+            // Active rendering probe: single pass
+            int activeCount = 0;
+            var activeDistinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < sorted.Count; i++)
             {
+                if (ActiveFingerprintTypes.Contains(sorted[i].Type))
+                {
+                    activeCount++;
+                    activeDistinct.Add(sorted[i].Type);
+                }
+            }
+            if (activeCount >= 2)
                 patterns.Add(new BehavioralPattern
                 {
                     Name = "Active Rendering Probe",
-                    Detail = $"Canvas/WebGL/Audio fingerprinting — generating unique hardware-derived hashes",
-                    TechniqueCount = activeHits.Count,
+                    Detail = "Canvas/WebGL/Audio fingerprinting — generating unique hardware-derived hashes",
+                    TechniqueCount = activeCount,
                     Confidence = 0.90,
                     Severity = 5,
-                    Techniques = activeHits.Select(a => a.Type).Distinct().ToList()
+                    Techniques = activeDistinct.ToList()
                 });
-            }
 
             return patterns;
         }
@@ -303,70 +387,115 @@ namespace PrivacyMonitor
 
         /// <summary>
         /// Cluster detected trackers by parent company to show consolidated data flow.
+        /// Single pass per company for speed.
         /// </summary>
-        public static List<CompanyCluster> ClusterByCompany(List<RequestEntry> requests)
+        public static List<CompanyCluster> ClusterByCompany(IEnumerable<RequestEntry> requests)
         {
-            return requests
-                .Where(r => !string.IsNullOrEmpty(r.TrackerCompany))
-                .GroupBy(r => r.TrackerCompany)
-                .Select(g => new CompanyCluster
+            var byCompany = new Dictionary<string, (HashSet<string> services, HashSet<string> domains, int total, HashSet<string> categories, HashSet<string> dataTypes, bool hasPost, double confSum)>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var r in requests)
+            {
+                string company = r.TrackerCompany ?? "";
+                if (string.IsNullOrEmpty(company)) continue;
+
+                if (!byCompany.TryGetValue(company, out var t))
                 {
-                    Company = g.Key,
-                    Services = g.Select(r => r.TrackerLabel).Where(l => !string.IsNullOrEmpty(l)).Distinct().ToList(),
-                    Domains = g.Select(r => r.Host).Distinct().ToList(),
-                    TotalRequests = g.Count(),
-                    Categories = g.Select(r => r.TrackerCategoryName).Where(c => !string.IsNullOrEmpty(c)).Distinct().ToList(),
-                    DataTypes = g.SelectMany(r => r.DataClassifications).Distinct().Take(8).ToList(),
-                    HasPostData = g.Any(r => r.HasBody),
-                    AvgConfidence = g.Average(r => r.ThreatConfidence)
-                })
-                .OrderByDescending(c => c.TotalRequests)
-                .ToList();
+                    t = (new HashSet<string>(StringComparer.OrdinalIgnoreCase), new HashSet<string>(StringComparer.OrdinalIgnoreCase), 0,
+                         new HashSet<string>(StringComparer.OrdinalIgnoreCase), new HashSet<string>(StringComparer.OrdinalIgnoreCase), false, 0);
+                    byCompany[company] = t;
+                }
+                t.total++;
+                t.confSum += r.ThreatConfidence;
+                if (!string.IsNullOrEmpty(r.TrackerLabel)) t.services.Add(r.TrackerLabel);
+                if (!string.IsNullOrEmpty(r.Host)) t.domains.Add(r.Host);
+                if (!string.IsNullOrEmpty(r.TrackerCategoryName)) t.categories.Add(r.TrackerCategoryName);
+                if (r.DataClassifications != null) foreach (var d in r.DataClassifications) { if (t.dataTypes.Count < 8) t.dataTypes.Add(d); }
+                if (r.HasBody) t.hasPost = true;
+                byCompany[company] = t;
+            }
+
+            var list = new List<CompanyCluster>(byCompany.Count);
+            foreach (var kv in byCompany)
+            {
+                var t = kv.Value;
+                list.Add(new CompanyCluster
+                {
+                    Company = kv.Key,
+                    Services = t.services.ToList(),
+                    Domains = t.domains.ToList(),
+                    TotalRequests = t.total,
+                    Categories = t.categories.ToList(),
+                    DataTypes = t.dataTypes.Take(8).ToList(),
+                    HasPostData = t.hasPost,
+                    AvgConfidence = t.total > 0 ? t.confSum / t.total : 0
+                });
+            }
+            list.Sort((a, b) => b.TotalRequests.CompareTo(a.TotalRequests));
+            return list;
         }
 
         // ════════════════════════════════════════════
         //  REQUEST BURST DETECTION
         // ════════════════════════════════════════════
 
+        private const int BurstMinCount = 5;
+        private const double BurstWindowSeconds = 3.0;
+
         /// <summary>
         /// Detect rapid-fire request bursts to the same tracker domain (beacon storms).
         /// A burst = 5+ requests to the same domain within 3 seconds.
         /// </summary>
-        public static List<RequestBurst> DetectRequestBursts(List<RequestEntry> requests)
+        public static List<RequestBurst> DetectRequestBursts(IEnumerable<RequestEntry> requests)
         {
             var bursts = new List<RequestBurst>();
-            if (requests.Count < 5) return bursts;
-
-            // Group by third-party host
-            var byHost = requests.Where(r => r.IsThirdParty)
-                .GroupBy(r => r.Host, StringComparer.OrdinalIgnoreCase);
-
-            foreach (var group in byHost)
+            var thirdParty = new List<RequestEntry>();
+            foreach (var r in requests)
             {
-                var sorted = group.OrderBy(r => r.Time).ToList();
+                if (r.IsThirdParty) thirdParty.Add(r);
+            }
+            if (thirdParty.Count < BurstMinCount) return bursts;
+
+            thirdParty.Sort((a, b) => a.Time.CompareTo(b.Time));
+
+            var byHost = new Dictionary<string, List<RequestEntry>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var r in thirdParty)
+            {
+                string h = r.Host ?? "";
+                if (string.IsNullOrEmpty(h)) continue;
+                if (!byHost.TryGetValue(h, out var list)) { list = new List<RequestEntry>(); byHost[h] = list; }
+                list.Add(r);
+            }
+
+            foreach (var kv in byHost)
+            {
+                var sorted = kv.Value;
+                if (sorted.Count < BurstMinCount) continue;
                 for (int i = 0; i < sorted.Count; i++)
                 {
-                    var window = sorted.Skip(i)
-                        .TakeWhile(r => (r.Time - sorted[i].Time).TotalSeconds <= 3.0)
-                        .ToList();
-                    if (window.Count >= 5)
+                    int j = i;
+                    while (j < sorted.Count && (sorted[j].Time - sorted[i].Time).TotalSeconds <= BurstWindowSeconds)
+                        j++;
+                    int count = j - i;
+                    if (count >= BurstMinCount)
                     {
-                        double windowMs = (window.Last().Time - window.First().Time).TotalMilliseconds;
-                        double rps = windowMs > 0 ? window.Count / (windowMs / 1000.0) : window.Count;
+                        double windowMs = (sorted[j - 1].Time - sorted[i].Time).TotalMilliseconds;
+                        double rps = windowMs > 0 ? count / (windowMs / 1000.0) : count;
                         bursts.Add(new RequestBurst
                         {
-                            Domain = group.Key,
-                            Count = window.Count,
+                            Domain = kv.Key,
+                            Count = count,
                             WindowMs = (int)windowMs,
                             RequestsPerSecond = Math.Round(rps, 1),
-                            Detail = $"{window.Count} requests to {group.Key} in {windowMs:F0}ms ({rps:F1} req/s) — beacon storm pattern"
+                            Detail = $"{count} requests to {kv.Key} in {windowMs:F0}ms ({rps:F1} req/s) — beacon storm pattern"
                         });
-                        break; // one burst per domain
+                        break;
                     }
                 }
             }
 
-            return bursts.OrderByDescending(b => b.Count).Take(10).ToList();
+            bursts.Sort((a, b) => b.Count.CompareTo(a.Count));
+            if (bursts.Count > 10) bursts.RemoveRange(10, bursts.Count - 10);
+            return bursts;
         }
 
         // ════════════════════════════════════════════

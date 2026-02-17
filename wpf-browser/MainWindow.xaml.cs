@@ -21,6 +21,27 @@ using Microsoft.Win32;
 
 namespace PrivacyMonitor
 {
+    /// <summary>Lightweight logger for non-fatal UI errors (kept separate from App-wide crash logging).</summary>
+    internal static class UiErrorLogger
+    {
+        public static void LogSoftError(string context, Exception ex)
+        {
+            try
+            {
+                string logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PrivacyMonitor");
+                Directory.CreateDirectory(logDir);
+                string logPath = Path.Combine(logDir, "ui-soft-errors.log");
+                File.AppendAllText(logPath,
+                    $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}Z] {context}{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}",
+                    Encoding.UTF8);
+            }
+            catch
+            {
+                // Never throw from logging.
+            }
+        }
+    }
+
     /// <summary>Exposed to WebView2 script so Settings page can save without relying on postMessage (which may be blocked or unavailable for NavigateToString content).</summary>
     public class SettingsSaveBridge
     {
@@ -38,9 +59,19 @@ namespace PrivacyMonitor
                 {
                     _window.ApplySettingsFromJson(json);
                     _window.SaveSettings();
-                    try { _tab?.WebView?.CoreWebView2?.NavigateToString(_window.GetSettingsHtml(showSavedMessage: true)); } catch { }
+                    try
+                    {
+                        _tab?.WebView?.CoreWebView2?.NavigateToString(_window.GetSettingsHtml(showSavedMessage: true));
+                    }
+                    catch (Exception ex)
+                    {
+                        UiErrorLogger.LogSoftError("SettingsSaveBridge.NavigateToString", ex);
+                    }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    UiErrorLogger.LogSoftError("SettingsSaveBridge.Save", ex);
+                }
             });
         }
     }
@@ -61,7 +92,10 @@ namespace PrivacyMonitor
                 {
                     _window.ClearHistoryAndRefresh(_tab);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    UiErrorLogger.LogSoftError("HistoryClearBridge.ClearHistory", ex);
+                }
             });
         }
     }
@@ -502,7 +536,10 @@ namespace PrivacyMonitor
                 string proxyValue = _settings.ProxyUrl?.Trim() ?? "";
                 File.WriteAllText(proxyFile, proxyValue);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                UiErrorLogger.LogSoftError("MainWindow.SaveSettings", ex);
+            }
         }
 
         private void LoadBookmarks()
@@ -513,12 +550,23 @@ namespace PrivacyMonitor
                 if (File.Exists(BookmarksPath()))
                     _bookmarks = JsonSerializer.Deserialize<List<BookmarkEntry>>(File.ReadAllText(BookmarksPath())) ?? new List<BookmarkEntry>();
             }
-            catch { _bookmarks = new List<BookmarkEntry>(); }
+            catch (Exception ex)
+            {
+                UiErrorLogger.LogSoftError("MainWindow.LoadBookmarks", ex);
+                _bookmarks = new List<BookmarkEntry>();
+            }
         }
         private void SaveBookmarks()
         {
             if (_isPrivate) return;
-            try { File.WriteAllText(BookmarksPath(), JsonSerializer.Serialize(_bookmarks, new JsonSerializerOptions { WriteIndented = true })); } catch { }
+            try
+            {
+                File.WriteAllText(BookmarksPath(), JsonSerializer.Serialize(_bookmarks, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception ex)
+            {
+                UiErrorLogger.LogSoftError("MainWindow.SaveBookmarks", ex);
+            }
         }
         private void LoadRecent()
         {
@@ -542,13 +590,25 @@ namespace PrivacyMonitor
                             if (url.Length == 0) return ( "", "", DateTime.UtcNow );
                             var title = e.TryGetProperty("Title", out var titleEl) ? titleEl.GetString() ?? "" : "";
                             var visited = DateTime.UtcNow;
-                            try { if (e.TryGetProperty("Visited", out var v)) visited = DateTime.Parse(v.GetString() ?? "", null, System.Globalization.DateTimeStyles.RoundtripKind); } catch { }
+                            try
+                            {
+                                if (e.TryGetProperty("Visited", out var v))
+                                    visited = DateTime.Parse(v.GetString() ?? "", null, System.Globalization.DateTimeStyles.RoundtripKind);
+                            }
+                            catch (Exception ex)
+                            {
+                                UiErrorLogger.LogSoftError("MainWindow.LoadRecent.ParseVisited", ex);
+                            }
                             return (title, url, visited);
                         })
                         .Where(t => t.Item2.Length > 0).Take(MaxRecent).ToList();
                 }
             }
-            catch { _recentUrls = new List<(string, string, DateTime)>(); }
+            catch (Exception ex)
+            {
+                UiErrorLogger.LogSoftError("MainWindow.LoadRecent", ex);
+                _recentUrls = new List<(string, string, DateTime)>();
+            }
         }
 
         private void AddRecent(string title, string url)
@@ -562,12 +622,26 @@ namespace PrivacyMonitor
             var safeTitle = title ?? "";
             _recentUrls.Insert(0, (safeTitle.Length > 50 ? safeTitle.Substring(0, 50) + "…" : safeTitle, url, DateTime.UtcNow));
             while (_recentUrls.Count > MaxRecent) _recentUrls.RemoveAt(_recentUrls.Count - 1);
-            try { File.WriteAllText(RecentPath(), JsonSerializer.Serialize(_recentUrls.Select(t => new { t.Title, t.Url, Visited = t.Visited.ToString("O") }))); } catch { }
+            try
+            {
+                File.WriteAllText(RecentPath(), JsonSerializer.Serialize(_recentUrls.Select(t => new { t.Title, t.Url, Visited = t.Visited.ToString("O") })));
+            }
+            catch (Exception ex)
+            {
+                UiErrorLogger.LogSoftError("MainWindow.AddRecent", ex);
+            }
         }
         private void SaveRecent()
         {
             if (_isPrivate) return;
-            try { File.WriteAllText(RecentPath(), JsonSerializer.Serialize(_recentUrls.Select(t => new { t.Title, t.Url, Visited = t.Visited.ToString("O") }))); } catch { }
+            try
+            {
+                File.WriteAllText(RecentPath(), JsonSerializer.Serialize(_recentUrls.Select(t => new { t.Title, t.Url, Visited = t.Visited.ToString("O") })));
+            }
+            catch (Exception ex)
+            {
+                UiErrorLogger.LogSoftError("MainWindow.SaveRecent", ex);
+            }
         }
 
         /// <summary>Called from History page (host object or postMessage). Clears history and refreshes the given tab.</summary>
@@ -575,7 +649,14 @@ namespace PrivacyMonitor
         {
             _recentUrls.Clear();
             SaveRecent();
-            try { tab?.WebView?.CoreWebView2?.NavigateToString(GetHistoryHtml()); } catch { }
+            try
+            {
+                tab?.WebView?.CoreWebView2?.NavigateToString(GetHistoryHtml());
+            }
+            catch (Exception ex)
+            {
+                UiErrorLogger.LogSoftError("MainWindow.ClearHistoryAndRefresh.NavigateToString", ex);
+            }
             if (StatusText != null) StatusText.Text = "History cleared.";
         }
 
@@ -592,7 +673,10 @@ namespace PrivacyMonitor
                 if (urls.Count == 0) urls.Add("about:welcome");
                 File.WriteAllText(SessionPath(), JsonSerializer.Serialize(urls));
             }
-            catch { }
+            catch (Exception ex)
+            {
+                UiErrorLogger.LogSoftError("MainWindow_Closing", ex);
+            }
         }
 
         private async Task RestoreOrWelcomeAsync()
@@ -1111,10 +1195,10 @@ namespace PrivacyMonitor
                     if (t.IsSleeping && t.WebView != null)
                     {
                         ResumeWebView(t.WebView);
-                        t.IsSleeping = false;
+                        t.MarkSleeping(false);
                     }
 
-                    t.LastActivityUtc = DateTime.UtcNow;
+                    t.NoteActivity();
 
                     bool isWelcome = string.IsNullOrEmpty(t.Url) || t.Url.StartsWith("about:", StringComparison.OrdinalIgnoreCase);
                     AddressBar.Text = isWelcome ? "" : t.Url;
@@ -1160,42 +1244,42 @@ namespace PrivacyMonitor
         // ================================================================
         private Border BuildTabHeader(BrowserTab tab)
         {
-            // Domain initial badge
+            // Domain initial badge (compact)
             var initial = new TextBlock
             {
-                Text = "-", FontSize = 9, FontWeight = FontWeights.Bold, Foreground = Brushes.White,
+                Text = "-", FontSize = 8, FontWeight = FontWeights.Bold, Foreground = Brushes.White,
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
             };
             tab.InitialBlock = initial;
             var initialBorder = new Border
             {
-                Width = 16, Height = 16, CornerRadius = new CornerRadius(8),
-                Background = PillActive, Margin = new Thickness(0, 0, 6, 0),
+                Width = 14, Height = 14, CornerRadius = new CornerRadius(7),
+                Background = PillActive, Margin = new Thickness(0, 0, 5, 0),
                 Child = initial, VerticalAlignment = VerticalAlignment.Center
             };
 
             // Title
             var title = new TextBlock
             {
-                Text = "New Tab", FontSize = 12, FontFamily = new FontFamily("Segoe UI"),
+                Text = "New Tab", FontSize = 11, FontFamily = new FontFamily("Segoe UI"),
                 Foreground = TabInactiveFg, VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 140
+                TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 130
             };
             tab.TitleBlock = title;
 
-            // Close button
+            // Close button (compact)
             var closeBtn = new Button
             {
-                Content = "\u00D7", FontSize = 14, Width = 20, Height = 20,
+                Content = "\u00D7", FontSize = 12, Width = 18, Height = 18,
                 Background = Brushes.Transparent, Foreground = TabInactiveFg,
                 BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
-                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0),
                 ToolTip = "Close  (Ctrl+W)"
             };
             var closeTpl = new ControlTemplate(typeof(Button));
             var closeBd = new FrameworkElementFactory(typeof(Border));
             closeBd.SetValue(Border.BackgroundProperty, Brushes.Transparent);
-            closeBd.SetValue(Border.CornerRadiusProperty, new CornerRadius(10));
+            closeBd.SetValue(Border.CornerRadiusProperty, new CornerRadius(9));
             closeBd.Name = "Bd";
             var closeCP = new FrameworkElementFactory(typeof(ContentPresenter));
             closeCP.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
@@ -1222,11 +1306,11 @@ namespace PrivacyMonitor
             var blockedBadge = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(217, 48, 37)),
-                CornerRadius = new CornerRadius(8),
-                MinWidth = 16,
-                Height = 16,
-                Padding = new Thickness(4, 0, 4, 0),
-                Margin = new Thickness(6, 0, 0, 0),
+                CornerRadius = new CornerRadius(6),
+                MinWidth = 14,
+                Height = 14,
+                Padding = new Thickness(3, 0, 3, 0),
+                Margin = new Thickness(4, 0, 0, 0),
                 Visibility = Visibility.Collapsed,
                 Child = blockedText,
                 VerticalAlignment = VerticalAlignment.Center
@@ -1261,13 +1345,13 @@ namespace PrivacyMonitor
 
             var border = new Border
             {
-                CornerRadius = new CornerRadius(10, 10, 0, 0),
-                Padding = new Thickness(12, 8, 10, 8),
+                CornerRadius = new CornerRadius(8, 8, 0, 0),
+                Padding = new Thickness(10, 5, 8, 5),
                 Cursor = Cursors.Hand,
-                Margin = new Thickness(0, 0, 2, 0),
+                Margin = new Thickness(0, 0, 1, 0),
                 Background = TabInactiveBg,
                 Child = panel,
-                MinWidth = 80, MaxWidth = 220,
+                MinWidth = 72, MaxWidth = 200,
                 ToolTip = "New Tab"
             };
 
@@ -1288,10 +1372,10 @@ namespace PrivacyMonitor
             if (tab.TabHeader.Child is DockPanel dp && dp.Children.Count > 0 && dp.Children[0] is Button cb)
                 cb.Foreground = active ? TabActiveFg : TabInactiveFg;
 
-            // Active tab: subtle shadow and theme-aware border so it connects to nav bar
+            // Active tab: flat border only (Chrome-like)
             if (active)
             {
-                tab.TabHeader.Effect = new DropShadowEffect { BlurRadius = 6, ShadowDepth = 0, Opacity = _isDarkTheme ? 0.12f : 0.06f, Color = Colors.Black };
+                tab.TabHeader.Effect = null;
                 tab.TabHeader.BorderThickness = new Thickness(1, 1, 1, 0);
                 tab.TabHeader.BorderBrush = TryFindResource("ActiveTabBorderBrush") is SolidColorBrush brush ? brush : new SolidColorBrush(Color.FromRgb(226, 232, 240));
             }
@@ -1367,7 +1451,7 @@ namespace PrivacyMonitor
                 if (!suspended)
                     continue;
 
-                tab.IsSleeping = true;
+                tab.MarkSleeping(true);
 
                 // Light UI hint so users know the tab is paused
                 Dispatcher.Invoke(() =>
@@ -1565,7 +1649,7 @@ namespace PrivacyMonitor
             bool suspended = await TrySuspendWebViewAsync(tab.WebView);
             if (suspended)
             {
-                tab.IsSleeping = true;
+                tab.MarkSleeping(true);
                 RefreshTaskManager();
                 StyleTabHeader(tab, tab.Id == _activeTabId);
             }
@@ -1633,7 +1717,7 @@ namespace PrivacyMonitor
         // ================================================================
         private void OnNavigationStarting(BrowserTab tab, CoreWebView2NavigationStartingEventArgs e)
         {
-            tab.LastActivityUtc = DateTime.UtcNow;
+            tab.NoteActivity();
             if (e.Uri != null && e.Uri.StartsWith("about:history", StringComparison.OrdinalIgnoreCase))
             {
                 e.Cancel = true;
@@ -1837,7 +1921,7 @@ namespace PrivacyMonitor
 
         private async void OnNavigationCompleted(BrowserTab tab, CoreWebView2NavigationCompletedEventArgs e)
         {
-            tab.LastActivityUtc = DateTime.UtcNow;
+            tab.NoteActivity();
             Dispatcher.Invoke(() =>
             {
                 tab.IsLoading = false;
@@ -1902,7 +1986,7 @@ namespace PrivacyMonitor
         {
             Dispatcher.Invoke(() =>
             {
-                tab.IsCrashed = true;
+                tab.MarkCrashed();
                 if (tab.Id == _activeTabId && CrashOverlay != null)
                 {
                     CrashOverlay.Visibility = Visibility.Visible;
@@ -2036,16 +2120,7 @@ namespace PrivacyMonitor
                     catch { }
 
                     // Record blocked request for forensic trail
-                    tab.BlockedCount++;
-                    tab.BlockedRequests.Add(new BlockedRequestInfo
-                    {
-                        Time = DateTime.Now, Host = reqHost, Url = uri.AbsoluteUri,
-                        Reason = decision.Reason, Category = entry.BlockCategory,
-                        Confidence = decision.Confidence, TrackerLabel = decision.TrackerLabel,
-                        ResourceType = entry.ResourceContext, Method = entry.Method
-                    });
-                    if (tab.BlockedRequests.Count > BrowserTab.MaxBlockedRequests)
-                        tab.BlockedRequests.RemoveAt(0);
+                    tab.RegisterBlocked(DateTime.Now, reqHost, uri.AbsoluteUri, decision.Reason, entry.BlockCategory, decision.Confidence, decision.TrackerLabel ?? "", entry.ResourceContext ?? "", entry.Method ?? "");
 
                     // Add host to in-page element blocker
                     if (tab.IsReady)
@@ -2127,21 +2202,22 @@ namespace PrivacyMonitor
                 {
                     // Drain pending so the request is in Requests when we match (avoids race with 500ms RefreshAll)
                     tab.DrainPending();
-                    for (int i = tab.Requests.Count - 1; i >= 0; i--)
+                    for (var node = tab.Requests.Last; node != null; node = node.Previous)
                     {
-                        if (tab.Requests[i].FullUrl == uri && tab.Requests[i].StatusCode == 0)
+                        var req = node.Value;
+                        if (req.FullUrl == uri && req.StatusCode == 0)
                         {
-                            tab.Requests[i].StatusCode = statusCode; tab.Requests[i].ResponseHeaders = respHeaders;
-                            PrivacyEngine.AddResponseSignals(tab.Requests[i]); // ETag/cache-cookie tracking now that response is in
-                            // Capture content-type and response size for evidence
+                            req.StatusCode = statusCode;
+                            req.ResponseHeaders = respHeaders;
+                            PrivacyEngine.AddResponseSignals(req);
                             if (respHeaders.TryGetValue("content-type", out var ct))
-                                tab.Requests[i].ContentType = ct;
+                                req.ContentType = ct;
                             if (respHeaders.TryGetValue("content-length", out var cl) && long.TryParse(cl, out var clVal))
-                                tab.Requests[i].ResponseSize = clVal;
-                            if (tab.Requests[i].Host == tab.CurrentHost && tab.SecurityHeaders.Count == 0 && statusCode >= 200 && statusCode < 400)
+                                req.ResponseSize = clVal;
+                            if (req.Host == tab.CurrentHost && tab.SecurityHeaders.Count == 0 && statusCode >= 200 && statusCode < 400)
                                 tab.SecurityHeaders = PrivacyEngine.AnalyzeSecurityHeaders(respHeaders);
                             if (_interceptorSink != null && _interceptorTabId == tab.Id)
-                                _interceptorSink.RecordResponse(tab.Id, uri, statusCode, respHeaders, tab.Requests[i].ContentType, tab.Requests[i].ResponseSize);
+                                _interceptorSink.RecordResponse(tab.Id, uri, statusCode, respHeaders, req.ContentType, req.ResponseSize);
                             break;
                         }
                     }
@@ -2877,7 +2953,7 @@ namespace PrivacyMonitor
             var tab = ActiveTab; if (tab == null) return;
             try
             {
-                var scan = BuildScanResult(tab); scan.ScanEnd = DateTime.Now;
+                var scan = BuildScanResult(tab); scan.ScanEnd = DateTime.UtcNow;
                 scan.AllSignals = tab.Requests.SelectMany(r => r.Signals ?? Enumerable.Empty<DetectionSignal>()).ToList();
                 scan.Score = PrivacyEngine.CalculateScore(scan); scan.GdprFindings = PrivacyEngine.MapToGdpr(scan);
                 var dlg = new SaveFileDialog { Filter = "HTML|*.html", FileName = $"privacy-audit-{tab.CurrentHost}-{DateTime.Now:yyyyMMdd-HHmmss}.html" };
@@ -2937,7 +3013,7 @@ namespace PrivacyMonitor
             var tab = ActiveTab;
             if (tab?.IsReady == true)
             {
-                tab.LastActivityUtc = DateTime.UtcNow;
+                tab.NoteActivity();
                 tab.WebView?.CoreWebView2?.GoBack();
             }
         }
@@ -2947,7 +3023,7 @@ namespace PrivacyMonitor
             var tab = ActiveTab;
             if (tab?.IsReady == true)
             {
-                tab.LastActivityUtc = DateTime.UtcNow;
+                tab.NoteActivity();
                 tab.WebView?.CoreWebView2?.GoForward();
             }
         }
@@ -2957,7 +3033,7 @@ namespace PrivacyMonitor
             var tab = ActiveTab;
             if (tab?.IsReady == true)
             {
-                tab.LastActivityUtc = DateTime.UtcNow;
+                tab.NoteActivity();
                 tab.WebView?.CoreWebView2?.Reload();
             }
         }
@@ -3011,7 +3087,7 @@ namespace PrivacyMonitor
         {
             var tab = ActiveTab;
             if (tab?.IsReady != true) return;
-            tab.LastActivityUtc = DateTime.UtcNow;
+            tab.NoteActivity();
             tab.WebView?.CoreWebView2?.NavigateToString(GetWelcomeHtml());
         }
 
@@ -3391,7 +3467,7 @@ namespace PrivacyMonitor
             }
             try
             {
-                tab.LastActivityUtc = DateTime.UtcNow;
+                tab.NoteActivity();
                 tab.WebView?.CoreWebView2?.Navigate(url);
             }
             catch (Exception ex)
@@ -3789,7 +3865,7 @@ namespace PrivacyMonitor
         // ================================================================
         private static ScanResult BuildScanResult(BrowserTab tab) => new()
         {
-            TargetUrl = tab.CurrentHost, ScanStart = tab.ScanStart, ScanEnd = DateTime.Now,
+            TargetUrl = tab.CurrentHost, ScanStart = tab.ScanStart, ScanEnd = DateTime.UtcNow,
             Requests = tab.Requests.ToList(), Fingerprints = tab.Fingerprints.ToList(), Cookies = tab.Cookies.ToList(),
             Storage = tab.Storage.ToList(), SecurityHeaders = tab.SecurityHeaders.ToList(), WebRtcLeaks = tab.WebRtcLeaks.ToList()
         };

@@ -379,19 +379,21 @@ namespace PrivacyMonitor
             "igshid", "li_fat_id", "epik", "s_kwcid", "wickedid",
             "cmpid", "irclickid", "zanpid", "gbraid", "wbraid",
             "vero_id", "oly_enc_id", "oly_anon_id", "_hsenc", "_hsmi",
-            "mc_cid", "mc_eid", "mkt_tok", "trk_contact", "trk_msg",
+            "mc_cid", "mkt_tok", "trk_contact", "trk_msg",
             "si", "ict", "_kx", "hsa_", "ref_",
             "sid", "uid", "cid", "_gac_", "_gl", "oaid", "idt", "_pk_", "_sp_", "distinct_id", "ajs_",
             "trk", "trk_", "track", "tracking", "clickid", "campaign", "affiliate", "ref",
             "_ref", "source", "medium", "content", "term", "campaign_id", "ad_id", "placement",
-            "adset", "ad_id", "fb_action_ids", "fb_source", "sc_cid", "mc_cid", "_hsq",
+            "adset", "fb_action_ids", "fb_source", "sc_cid", "_hsq",
             "redirect_mid", "redirect_log_mid", "_bta_c", "_bta_t", "vero_conv", "_branch_match_id",
-            "tapad_id", "lr_id", "lr_enc", "om_campaign", "om_channel", "_gl", "gclsrc",
+            "tapad_id", "lr_id", "lr_enc", "om_campaign", "om_channel", "gclsrc",
             "__n", "__imp", "vgo_ee", "ns_", "ti_", "_pxl", "_px", "px_", "conv_", "click_id",
             "rnd", "rand", "cache_bust", "cb_", "_reqid", "req_id", "request_id", "correlation",
             "session_id", "visitor_id", "user_id", "device_id", "client_id", "customer_id",
             "_hjid", "_hj", "intercom-id", "drift_", "hubspotutk", "__hs", "mp_", "s_vi", "s_fid"
         };
+
+        private static readonly HashSet<string> TrackingParamSet = new(TrackingParamPrefixes.Select(p => p.ToLowerInvariant()), StringComparer.OrdinalIgnoreCase);
 
         // ════════════════════════════════════════════
         //  TRACKING COOKIE PATTERNS
@@ -428,6 +430,10 @@ namespace PrivacyMonitor
             "__cf_bm", "cf_clearance",
             "_abck", "bm_sv", "ak_bmsc",
         };
+
+        private static readonly string[] TrackingCookiePatternsLower = TrackingCookiePatterns.Select(p => p.ToLowerInvariant()).ToArray();
+
+        private static readonly string[] TrackingCookieContainsLower = { "visitorid", "visitor_id", "deviceid", "device_id", "userid", "user_id", "clientid", "client_id", "customerid", "customer_id", "browserid", "browser_id", "uuid" };
 
         // ════════════════════════════════════════════
         //  ANTI-EVASION: CNAME CLOAKING HEURISTICS
@@ -714,13 +720,22 @@ namespace PrivacyMonitor
 
         public static TrackerMatch? DetectTrackerFull(string host, string url)
         {
-            // 1) Direct O(1) domain lookup
-            foreach (var kv in TrackerLookup)
+            if (string.IsNullOrEmpty(host)) return null;
+
+            // 1) Exact O(1) domain lookup, then parent-domain suffix lookup
+            if (TrackerLookup.TryGetValue(host, out var exact))
+                return new TrackerMatch { Info = exact, MatchType = "domain", Confidence = 0.95 };
+
+            for (int i = 0; i < host.Length; i++)
             {
-                if (host.Equals(kv.Key, StringComparison.OrdinalIgnoreCase) ||
-                    host.EndsWith("." + kv.Key, StringComparison.OrdinalIgnoreCase))
-                    return new TrackerMatch { Info = kv.Value, MatchType = "domain", Confidence = 0.95 };
+                i = host.IndexOf('.', i);
+                if (i < 0) break;
+                if (i + 1 >= host.Length) break;
+                string suffix = host.Substring(i + 1);
+                if (TrackerLookup.TryGetValue(suffix, out var info))
+                    return new TrackerMatch { Info = info, MatchType = "domain", Confidence = 0.95 };
             }
+
             // 1b) Static blocklist domain lookup (ads/trackers)
             if (ProtectionEngine.TryGetBlocklistEntry(host, out var bl))
             {
@@ -898,52 +913,73 @@ namespace PrivacyMonitor
         //  ANTI-EVASION: HIGH ENTROPY DETECTION
         // ════════════════════════════════════════════
 
+        /// <summary>Shannon entropy (bits per symbol). Uses 256-slot array for ASCII to avoid Dictionary allocation.</summary>
         public static double ShannonEntropy(string s)
         {
             if (string.IsNullOrEmpty(s) || s.Length < 8) return 0;
-            var freq = new Dictionary<char, int>();
-            foreach (char c in s) freq[c] = freq.GetValueOrDefault(c) + 1;
             double len = s.Length;
-            return -freq.Values.Sum(f => { double p = f / len; return p * Math.Log2(p); });
+            const int asciiLimit = 256;
+            int[] freq = new int[asciiLimit];
+            bool allAscii = true;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c < asciiLimit) freq[c]++;
+                else allAscii = false;
+            }
+            if (allAscii)
+            {
+                double sum = 0;
+                for (int i = 0; i < freq.Length; i++)
+                {
+                    if (freq[i] == 0) continue;
+                    double p = freq[i] / len;
+                    sum += p * Math.Log2(p);
+                }
+                return -sum;
+            }
+            var dict = new Dictionary<char, int>();
+            foreach (char c in s) dict[c] = dict.GetValueOrDefault(c) + 1;
+            return -dict.Values.Sum(f => { double p = f / len; return p * Math.Log2(p); });
         }
 
         private static void DetectHighEntropyParams(RequestEntry req, List<DetectionSignal> signals)
         {
-            try
+            if (string.IsNullOrEmpty(req.FullUrl)) return;
+            int q = req.FullUrl.IndexOf('?');
+            if (q < 0 || q >= req.FullUrl.Length - 1) return;
+            string query = req.FullUrl.Substring(q + 1);
+            foreach (var pair in query.Split('&'))
             {
-                var uri = new Uri(req.FullUrl);
-                if (string.IsNullOrEmpty(uri.Query)) return;
-                foreach (var pair in uri.Query.TrimStart('?').Split('&'))
-                {
-                    var parts = pair.Split('=', 2);
-                    if (parts.Length < 2 || parts[1].Length < 16) continue;
-                    string val = parts[1];
-                    double entropy = ShannonEntropy(val);
-                    bool isBase64 = Base64Payload.IsMatch(val);
-                    bool isHex = HexPayload.IsMatch(val);
-                    bool hasEntropyPattern = HighEntropyPattern.IsMatch(val);
+                int eq = pair.IndexOf('=');
+                if (eq <= 0 || eq >= pair.Length - 1) continue;
+                string key = pair.Substring(0, eq);
+                string val = pair.Substring(eq + 1);
+                if (val.Length < 16) continue;
+                double entropy = ShannonEntropy(val);
+                bool isBase64 = Base64Payload.IsMatch(val);
+                bool isHex = HexPayload.IsMatch(val);
+                bool hasEntropyPattern = HighEntropyPattern.IsMatch(val);
 
-                    if (entropy > 3.8 || isBase64 || isHex || hasEntropyPattern)
+                if (entropy > 3.8 || isBase64 || isHex || hasEntropyPattern)
+                {
+                    double conf = entropy > 4.5 ? 0.85 : entropy > 4.0 ? 0.75 : 0.60;
+                    if (isBase64 || isHex || hasEntropyPattern) conf = Math.Max(conf, 0.80);
+                    signals.Add(new DetectionSignal
                     {
-                        double conf = entropy > 4.5 ? 0.85 : entropy > 4.0 ? 0.75 : 0.60;
-                        if (isBase64 || isHex || hasEntropyPattern) conf = Math.Max(conf, 0.80);
-                        signals.Add(new DetectionSignal
-                        {
-                            SignalType = "high_entropy_param",
-                            Source = req.Host,
-                            Detail = $"Param '{parts[0]}' has high-entropy identifier ({entropy:F1}) — possible obfuscated tracking ID"
-                                     + (isBase64 ? " [Base64]" : "") + (isHex ? " [Hex]" : "") + (hasEntropyPattern ? " [Random-looking]" : ""),
-                            Confidence = conf,
-                            Risk = RiskType.Tracking,
-                            Severity = 3,
-                            Evidence = $"{parts[0]}={val[..Math.Min(40, val.Length)]}... (entropy: {entropy:F2})",
-                            GdprArticle = "Art. 5(1)(c)"
-                        });
-                        break; // one signal per request is enough
-                    }
+                        SignalType = "high_entropy_param",
+                        Source = req.Host,
+                        Detail = $"Param '{key}' has high-entropy identifier ({entropy:F1}) — possible obfuscated tracking ID"
+                                 + (isBase64 ? " [Base64]" : "") + (isHex ? " [Hex]" : "") + (hasEntropyPattern ? " [Random-looking]" : ""),
+                        Confidence = conf,
+                        Risk = RiskType.Tracking,
+                        Severity = 3,
+                        Evidence = $"{key}={val.Substring(0, Math.Min(40, val.Length))}... (entropy: {entropy:F2})",
+                        GdprArticle = "Art. 5(1)(c)"
+                    });
+                    break;
                 }
             }
-            catch { }
         }
 
         // ════════════════════════════════════════════
@@ -1084,18 +1120,18 @@ namespace PrivacyMonitor
         public static List<string> DetectTrackingParams(string url)
         {
             var found = new List<string>();
-            try
+            if (string.IsNullOrEmpty(url)) return found;
+            int q = url.IndexOf('?');
+            if (q < 0 || q >= url.Length - 1) return found;
+            string query = url.Substring(q + 1);
+            foreach (var pair in query.Split('&'))
             {
-                var uri = new Uri(url);
-                if (string.IsNullOrEmpty(uri.Query)) return found;
-                foreach (var pair in uri.Query.TrimStart('?').Split('&'))
-                {
-                    var key = pair.Split('=')[0].ToLowerInvariant();
-                    if (TrackingParamPrefixes.Any(tp => key.StartsWith(tp) || key == tp))
-                        found.Add(pair);
-                }
+                int eq = pair.IndexOf('=');
+                string key = (eq > 0 ? pair.Substring(0, eq) : pair).Trim().ToLowerInvariant();
+                if (string.IsNullOrEmpty(key)) continue;
+                if (TrackingParamSet.Contains(key) || TrackingParamPrefixes.Any(tp => key.StartsWith(tp, StringComparison.OrdinalIgnoreCase)))
+                    found.Add(pair);
             }
-            catch { }
             return found;
         }
 
@@ -1105,21 +1141,15 @@ namespace PrivacyMonitor
 
         public static string ClassifyCookie(string name)
         {
+            if (string.IsNullOrEmpty(name)) return "Unknown";
             var lower = name.ToLowerInvariant();
-            if (TrackingCookiePatterns.Any(p => lower.StartsWith(p.ToLowerInvariant()) || lower == p.ToLowerInvariant()))
-                return "Tracking / Analytics";
+            for (int i = 0; i < TrackingCookiePatternsLower.Length; i++)
+                if (lower == TrackingCookiePatternsLower[i] || lower.StartsWith(TrackingCookiePatternsLower[i]))
+                    return "Tracking / Analytics";
 
-            // Stronger heuristic: generic identifier-style cookies used by many tracking stacks
-            if (lower.Contains("visitorid") || lower.Contains("visitor_id") ||
-                lower.Contains("deviceid") || lower.Contains("device_id") ||
-                lower.Contains("userid") || lower.Contains("user_id") ||
-                lower.Contains("clientid") || lower.Contains("client_id") ||
-                lower.Contains("customerid") || lower.Contains("customer_id") ||
-                lower.Contains("browserid") || lower.Contains("browser_id") ||
-                lower.Contains("uuid"))
-            {
-                return "Tracking / Analytics";
-            }
+            for (int i = 0; i < TrackingCookieContainsLower.Length; i++)
+                if (lower.Contains(TrackingCookieContainsLower[i]))
+                    return "Tracking / Analytics";
 
             if (lower.Contains("session") || lower.Contains("sid") || lower.Contains("csrf") || lower.Contains("token") || lower.Contains("auth"))
                 return "Session / Security";
@@ -1132,21 +1162,14 @@ namespace PrivacyMonitor
 
         public static string ClassifyStorageKey(string key)
         {
+            if (string.IsNullOrEmpty(key)) return "Application Data";
             var lower = key.ToLowerInvariant();
-            if (TrackingCookiePatterns.Any(p => lower.Contains(p.ToLowerInvariant())))
-                return "Tracking / Analytics";
-
-            // Stronger heuristic: identifier-style keys commonly used for tracking
-            if (lower.Contains("visitorid") || lower.Contains("visitor_id") ||
-                lower.Contains("deviceid") || lower.Contains("device_id") ||
-                lower.Contains("userid") || lower.Contains("user_id") ||
-                lower.Contains("clientid") || lower.Contains("client_id") ||
-                lower.Contains("customerid") || lower.Contains("customer_id") ||
-                lower.Contains("browserid") || lower.Contains("browser_id") ||
-                lower.Contains("uuid"))
-            {
-                return "Tracking / Analytics";
-            }
+            for (int i = 0; i < TrackingCookiePatternsLower.Length; i++)
+                if (lower.Contains(TrackingCookiePatternsLower[i]))
+                    return "Tracking / Analytics";
+            for (int i = 0; i < TrackingCookieContainsLower.Length; i++)
+                if (lower.Contains(TrackingCookieContainsLower[i]))
+                    return "Tracking / Analytics";
 
             if (lower.Contains("token") || lower.Contains("auth") || lower.Contains("session"))
                 return "Authentication";
@@ -1163,13 +1186,24 @@ namespace PrivacyMonitor
 
         public static int CountAllTrackingCookies(ScanResult scan)
         {
-            int jsTracking = scan.Cookies.Count(c => c.Classification == "Tracking / Analytics");
-            var setCookieNames = scan.Requests
-                .SelectMany(r => r.ResponseHeaders.Where(h => h.Key.Equals("set-cookie", StringComparison.OrdinalIgnoreCase))
-                    .Select(h => h.Value.Split(';')[0].Split('=')[0].Trim()))
-                .Distinct().Where(n => !scan.Cookies.Any(c => c.Name == n))
-                .Count(n => ClassifyCookie(n) == "Tracking / Analytics");
-            return jsTracking + setCookieNames;
+            int jsTracking = 0;
+            var jsNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var c in scan.Cookies)
+            {
+                if (c.Classification == "Tracking / Analytics") jsTracking++;
+                jsNames.Add(c.Name);
+            }
+            var setCookieNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var r in scan.Requests)
+                if (r.ResponseHeaders != null)
+                    foreach (var h in r.ResponseHeaders)
+                        if (h.Key.Equals("set-cookie", StringComparison.OrdinalIgnoreCase))
+                            setCookieNames.Add(h.Value.Split(';')[0].Split('=')[0].Trim());
+            int setTracking = 0;
+            foreach (var n in setCookieNames)
+                if (!jsNames.Contains(n) && ClassifyCookie(n) == "Tracking / Analytics")
+                    setTracking++;
+            return jsTracking + setTracking;
         }
 
         // ════════════════════════════════════════════
@@ -1362,23 +1396,38 @@ namespace PrivacyMonitor
             var breakdown = new Dictionary<string, int>();
             var catScores = new Dictionary<string, int> { ["Tracking"] = 100, ["Fingerprinting"] = 100, ["DataLeakage"] = 100, ["Security"] = 100, ["Behavioral"] = 100 };
 
-            // ── Trackers: baseline-normalized diminishing returns ──
-            var trackerEntries = scan.Requests.Where(r => !string.IsNullOrEmpty(r.TrackerLabel)).ToList();
-            int uniqueTrackers = trackerEntries.Select(r => r.TrackerLabel).Distinct().Count();
-            // Weighted tracker penalty: each tracker penalized by its baseline weight
-            double weightedTrackerSum = 0;
-            foreach (var group in trackerEntries.GroupBy(r => r.TrackerLabel))
+            // Single pass over Requests: trackers, TP domains, POST, params, set-cookie names
+            var trackerEntries = new List<RequestEntry>();
+            var trackerCatByLabel = new Dictionary<string, TrackerCategory>(StringComparer.OrdinalIgnoreCase);
+            var tpDomains = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var setCookieNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int postTp = 0, paramTotal = 0;
+            foreach (var r in scan.Requests)
             {
-                var sample = group.First();
-                Enum.TryParse<TrackerCategory>(sample.TrackerCategoryName, out var cat);
-                weightedTrackerSum += BaselineWeight(cat);
+                if (!string.IsNullOrEmpty(r.TrackerLabel))
+                {
+                    trackerEntries.Add(r);
+                    if (!trackerCatByLabel.ContainsKey(r.TrackerLabel) && Enum.TryParse<TrackerCategory>(r.TrackerCategoryName, out var cat))
+                        trackerCatByLabel[r.TrackerLabel] = cat;
+                }
+                if (r.IsThirdParty) { tpDomains.Add(r.Host ?? ""); if (r.HasBody) postTp++; }
+                paramTotal += r.TrackingParams?.Count ?? 0;
+                if (r.ResponseHeaders != null)
+                    foreach (var h in r.ResponseHeaders)
+                        if (h.Key.Equals("set-cookie", StringComparison.OrdinalIgnoreCase))
+                            setCookieNames.Add(h.Value.Split(';')[0].Split('=')[0].Trim());
             }
+            int uniqueTrackers = trackerCatByLabel.Count;
+            double weightedTrackerSum = 0;
+            foreach (var cat in trackerCatByLabel.Values) weightedTrackerSum += BaselineWeight(cat);
+
+            // ── Trackers: baseline-normalized diminishing returns ──
             int trackerPenalty = (int)Math.Min(50, 7 * Math.Sqrt(weightedTrackerSum));
             score -= trackerPenalty; catScores["Tracking"] -= trackerPenalty;
             breakdown["Trackers"] = -trackerPenalty;
 
             // ── Third-party domains: diminishing ──
-            int uniqueTpDomains = scan.Requests.Where(r => r.IsThirdParty).Select(r => r.Host).Distinct().Count();
+            int uniqueTpDomains = tpDomains.Count;
             int domainPenalty = (int)Math.Min(20, 2.5 * Math.Sqrt(Math.Max(0, uniqueTpDomains - 2)));
             score -= domainPenalty; catScores["Tracking"] -= domainPenalty;
             breakdown["Third-party domains"] = -domainPenalty;
@@ -1388,19 +1437,18 @@ namespace PrivacyMonitor
             score -= fpPenalty; catScores["Fingerprinting"] -= fpPenalty;
             breakdown["Fingerprinting"] = -fpPenalty;
 
-            // ── Tracking cookies: softer diminishing curve to prevent alarm fatigue ──
+            // ── Tracking cookies: softer diminishing curve ──
             int allTrackingCookies = CountAllTrackingCookies(scan);
             int cookiePenalty = (int)Math.Min(22, 4 * Math.Sqrt(allTrackingCookies));
             score -= cookiePenalty; catScores["Tracking"] -= cookiePenalty;
             breakdown["Tracking cookies"] = -cookiePenalty;
 
             // ── Tracking params: diminishing ──
-            int paramTotal = scan.Requests.Sum(r => r.TrackingParams.Count);
             int paramPenalty = (int)Math.Min(15, 3 * Math.Sqrt(paramTotal));
             score -= paramPenalty; catScores["Tracking"] -= paramPenalty;
             breakdown["Tracking URL params"] = -paramPenalty;
 
-            // ── Security headers: capped to prevent over-penalizing common configs ──
+            // ── Security headers ──
             int headerPenalty = Math.Min(18, scan.SecurityHeaders.Sum(h => h.ScoreImpact));
             score -= headerPenalty; catScores["Security"] -= headerPenalty;
             breakdown["Security headers"] = -headerPenalty;
@@ -1411,51 +1459,51 @@ namespace PrivacyMonitor
             breakdown["WebRTC leaks"] = -rtcPenalty;
 
             // ── POST to third-party ──
-            int postTp = scan.Requests.Count(r => r.IsThirdParty && r.HasBody);
             int postPenalty = Math.Min(12, postTp * 4);
             score -= postPenalty; catScores["DataLeakage"] -= postPenalty;
             breakdown["POST to third-party"] = -postPenalty;
 
             // ── Excessive cookies ──
-            int totalCookies = scan.Cookies.Count + scan.Requests
-                .SelectMany(r => r.ResponseHeaders.Where(h => h.Key.Equals("set-cookie", StringComparison.OrdinalIgnoreCase)))
-                .Select(h => h.Value.Split(';')[0].Split('=')[0].Trim()).Distinct().Count();
+            int totalCookies = scan.Cookies.Count + setCookieNames.Count;
             int excessPenalty = totalCookies > 20 ? 10 : totalCookies > 10 ? 5 : 0;
             score -= excessPenalty;
             if (excessPenalty > 0) breakdown["Excessive cookies"] = -excessPenalty;
 
-            // ── Behavioral tracking (mouse/scroll/keystroke/session replay/obfuscation) ──
-            int behavioralCount = scan.Fingerprints.Count(f =>
-                f.Type.StartsWith("Behavioral:") || f.Type.Contains("Session Replay") ||
-                f.Type.Contains("Obfuscation") || f.Type.Contains("Dynamic Script") ||
-                f.Type.Contains("Beacon Data") || f.Type.Contains("Cross-Frame"));
+            // ── Behavioral tracking ──
+            int behavioralCount = 0;
+            foreach (var f in scan.Fingerprints)
+                if (f.Type.StartsWith("Behavioral:") || f.Type.Contains("Session Replay") || f.Type.Contains("Obfuscation") || f.Type.Contains("Dynamic Script") || f.Type.Contains("Beacon Data") || f.Type.Contains("Cross-Frame"))
+                    behavioralCount++;
             int behavioralPenalty = Math.Min(25, behavioralCount * 7);
             score -= behavioralPenalty; catScores["Behavioral"] -= behavioralPenalty;
             if (behavioralPenalty > 0) breakdown["Behavioral tracking"] = -behavioralPenalty;
 
-            // ── Anti-evasion signals ──
-            int cnamePenalty = Math.Min(10, scan.AllSignals.Count(s => s.SignalType == "cname_suspect") * 3);
+            // Single pass over AllSignals for signal-type counts
+            int cnameSuspects = 0, highEntropyParams = 0, thirdPartyScripts = 0, etagCount = 0, totalSignals = 0, highConf = 0, highEntropyHighConf = 0;
+            foreach (var s in scan.AllSignals)
+            {
+                totalSignals++;
+                if (s.Confidence >= 0.80) highConf++;
+                switch (s.SignalType)
+                {
+                    case "cname_suspect": cnameSuspects++; break;
+                    case "high_entropy_param": highEntropyParams++; if (s.Confidence >= 0.8) highEntropyHighConf++; break;
+                    case "third_party_script": thirdPartyScripts++; break;
+                    case "etag_tracking": etagCount++; break;
+                }
+            }
+            int cnamePenalty = Math.Min(10, cnameSuspects * 3);
             if (cnamePenalty > 0) { score -= cnamePenalty; breakdown["CNAME suspects"] = -cnamePenalty; }
-            int entropyPenalty = Math.Min(8, scan.AllSignals.Count(s => s.SignalType == "high_entropy_param") / 3);
+            int entropyPenalty = Math.Min(8, highEntropyParams / 3);
             if (entropyPenalty > 0) { score -= entropyPenalty; breakdown["Obfuscated IDs"] = -entropyPenalty; }
-
-            // ── Third-party scripts (tracking vector) ──
-            int thirdPartyScripts = scan.AllSignals.Count(s => s.SignalType == "third_party_script");
             int scriptPenalty = Math.Min(10, (int)(2.5 * Math.Sqrt(Math.Max(0, thirdPartyScripts))));
             if (scriptPenalty > 0) { score -= scriptPenalty; catScores["Tracking"] -= scriptPenalty; breakdown["Third-party scripts"] = -scriptPenalty; }
-
-            // ── ETag / cache-cookie tracking ──
-            int etagCount = scan.AllSignals.Count(s => s.SignalType == "etag_tracking");
             int etagPenalty = Math.Min(8, etagCount * 4);
             if (etagPenalty > 0) { score -= etagPenalty; breakdown["ETag tracking"] = -etagPenalty; }
 
             // Clamp
             score = Math.Max(0, Math.Min(100, score));
             foreach (var k in catScores.Keys.ToList()) catScores[k] = Math.Max(0, Math.Min(100, catScores[k]));
-
-            // Signal stats
-            int totalSignals = scan.AllSignals.Count;
-            int highConf = scan.AllSignals.Count(s => s.Confidence >= 0.80);
 
             string grade;
             SolidColorBrush color;
@@ -1485,12 +1533,13 @@ namespace PrivacyMonitor
             };
 
             // ── Threat Tier Classification ──
-            bool hasDMP = trackerEntries.Any(r => r.TrackerCategoryName == "DMP");
-            bool hasSessionReplay = trackerEntries.Any(r => r.TrackerCategoryName == "SessionReplay");
+            bool hasDMP = trackerCatByLabel.Values.Contains(TrackerCategory.DMP);
+            bool hasSessionReplay = trackerCatByLabel.Values.Contains(TrackerCategory.SessionReplay);
             bool hasFingerprinting = scan.Fingerprints.Count >= 2;
-            bool hasBehavioral = scan.Fingerprints.Any(f => f.Type.StartsWith("Behavioral:") || f.Type.Contains("Session Replay"));
-            bool hasIdentityStitching = scan.AllSignals.Any(s => s.SignalType == "high_entropy_param" && s.Confidence >= 0.8);
-            int adTrackers = trackerEntries.Count(r => r.TrackerCategoryName == "Advertising");
+            bool hasBehavioral = behavioralCount > 0;
+            bool hasIdentityStitching = highEntropyHighConf > 0;
+            int adTrackers = 0;
+            foreach (var r in trackerEntries) if (r.TrackerCategoryName == "Advertising") adTrackers++;
 
             ThreatTier tier;
             string tierLabel;

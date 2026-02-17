@@ -77,7 +77,7 @@ namespace PrivacyMonitor
   </div>
   <div class=""doc-info"">
     <strong>Target:</strong> {Esc(scan.TargetUrl)}<br>
-    <strong>Date:</strong> {scan.ScanStart:yyyy-MM-dd HH:mm:ss}<br>
+    <strong>Date:</strong> {scan.ScanStart.ToLocalTime():yyyy-MM-dd HH:mm:ss}<br>
     <strong>Duration:</strong> {(scan.ScanEnd - scan.ScanStart).TotalSeconds:F1}s<br>
     <strong>Report ID:</strong> {Guid.NewGuid().ToString()[..8].ToUpper()}
   </div>

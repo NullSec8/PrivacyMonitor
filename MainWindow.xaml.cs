@@ -2033,18 +2033,19 @@ namespace PrivacyMonitor
                 {
                     // Drain pending so the request is in Requests when we match (avoids race with 500ms RefreshAll)
                     tab.DrainPending();
-                    for (int i = tab.Requests.Count - 1; i >= 0; i--)
+                    for (var node = tab.Requests.Last; node != null; node = node.Previous)
                     {
-                        if (tab.Requests[i].FullUrl == uri && tab.Requests[i].StatusCode == 0)
+                        var req = node.Value;
+                        if (req.FullUrl == uri && req.StatusCode == 0)
                         {
-                            tab.Requests[i].StatusCode = statusCode; tab.Requests[i].ResponseHeaders = respHeaders;
-                            PrivacyEngine.AddResponseSignals(tab.Requests[i]); // ETag/cache-cookie tracking now that response is in
-                            // Capture content-type and response size for evidence
+                            req.StatusCode = statusCode;
+                            req.ResponseHeaders = respHeaders;
+                            PrivacyEngine.AddResponseSignals(req);
                             if (respHeaders.TryGetValue("content-type", out var ct))
-                                tab.Requests[i].ContentType = ct;
+                                req.ContentType = ct;
                             if (respHeaders.TryGetValue("content-length", out var cl) && long.TryParse(cl, out var clVal))
-                                tab.Requests[i].ResponseSize = clVal;
-                            if (tab.Requests[i].Host == tab.CurrentHost && tab.SecurityHeaders.Count == 0 && statusCode >= 200 && statusCode < 400)
+                                req.ResponseSize = clVal;
+                            if (req.Host == tab.CurrentHost && tab.SecurityHeaders.Count == 0 && statusCode >= 200 && statusCode < 400)
                                 tab.SecurityHeaders = PrivacyEngine.AnalyzeSecurityHeaders(respHeaders);
                             break;
                         }
