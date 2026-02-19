@@ -108,7 +108,7 @@ public partial class App : Application
             return null;
         }
 
-        SystemThemeDetector.WatchTheme();
+        SystemThemeDetector.Start();
         ApplySystemTheme();
         SystemThemeDetector.ThemeChanged += (_, _) => ApplySystemTheme();
 

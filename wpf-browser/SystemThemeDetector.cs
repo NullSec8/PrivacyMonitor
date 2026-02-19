@@ -213,7 +213,7 @@ namespace PrivacyMonitor
                         int notifyResult = RegNotifyChangeKeyValue(
                             keyHandle,
                             false,
-                            RegChangeFilter.Value,
+                            RegChangeFilter,
                             waitEvent.SafeWaitHandle.DangerousGetHandle(),
                             true);
 

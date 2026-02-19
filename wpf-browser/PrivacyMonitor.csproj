@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <ApplicationIcon>favicon (1).ico</ApplicationIcon>
+    <!-- ApplicationIcon: add favicon.ico to wpf-browser/ to set app icon -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
@@ -20,9 +20,11 @@
   <ItemGroup>
     <Compile Remove="ExportBlocklist\**" />
   </ItemGroup>
+  
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3719.77" />
-    <PackageReference Include="WebView2.Runtime.X64" Version="144.0.3719.115" />
+    <PackageReference Include="WebView2.Runtime.X64" Version="114.0.1823.67" />
   </ItemGroup>
 
   <ItemGroup>

@@ -59,10 +59,10 @@ namespace PrivacyMonitor
         public static ThreatDiff Compare(ScanResult unprotected, ScanResult protectedScan)
         {
             // Defensive null handling
-            var unprotReqs = unprotected?.Requests ?? Enumerable.Empty<Request>();
-            var protReqs = protectedScan?.Requests ?? Enumerable.Empty<Request>();
-            var unprotStorage = unprotected?.Storage ?? Enumerable.Empty<StorageKey>();
-            var protStorage = protectedScan?.Storage ?? Enumerable.Empty<StorageKey>();
+            var unprotReqs = unprotected?.Requests ?? Enumerable.Empty<RequestEntry>();
+            var protReqs = protectedScan?.Requests ?? Enumerable.Empty<RequestEntry>();
+            var unprotStorage = unprotected?.Storage ?? Enumerable.Empty<StorageItem>();
+            var protStorage = protectedScan?.Storage ?? Enumerable.Empty<StorageItem>();
 
             int extraRequests = Math.Max(0, unprotReqs.Count() - protReqs.Count());
             int extraThirdParty = Math.Max(
@@ -114,8 +114,8 @@ namespace PrivacyMonitor
         }
 
         internal static (int uniqueCount, List<string> diffLabels) ComputeUniqueTrackers(
-            IEnumerable<Request> unprotectedReqs,
-            IEnumerable<Request> protectedReqs)
+            IEnumerable<RequestEntry> unprotectedReqs,
+            IEnumerable<RequestEntry> protectedReqs)
         {
             // Project unique tracker labels or domains
             var unprotLabels = new HashSet<string>(
@@ -136,8 +136,8 @@ namespace PrivacyMonitor
         }
 
         internal static (int uniqueCount, List<string> diffCompanies) ComputeNewCompanies(
-            IEnumerable<Request> unprotectedReqs,
-            IEnumerable<Request> protectedReqs)
+            IEnumerable<RequestEntry> unprotectedReqs,
+            IEnumerable<RequestEntry> protectedReqs)
         {
             var unprotCompanies = new HashSet<string>(
                 unprotectedReqs
@@ -160,12 +160,12 @@ namespace PrivacyMonitor
         /// TODO: Add filter parameter to restrict to tracking-related keys when desired.
         /// </summary>
         internal static (int uniqueCount, List<string> newKeys) ComputeStorageDifference(
-            IEnumerable<StorageKey> unprotectedStorage,
-            IEnumerable<StorageKey> protectedStorage
+            IEnumerable<StorageItem> unprotectedStorage,
+            IEnumerable<StorageItem> protectedStorage
         )
         {
             // Defensive: null guard and use key identity or value. Adapt key extractor as needed.
-            Func<StorageKey, string> keySelector = k => k?.Key ?? "";
+            Func<StorageItem, string> keySelector = k => k?.Key ?? "";
 
             var unprotKeys = new HashSet<string>(
                 unprotectedStorage.Where(k => k != null && !string.IsNullOrWhiteSpace(keySelector(k))).Select(keySelector),
