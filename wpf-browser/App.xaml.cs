@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -68,31 +69,9 @@ public partial class App : Application
                 string? repoRoot = FindRepoRoot();
                 if (repoRoot != null)
                 {
-                    string outPath = Path.Combine(repoRoot, "chrome-extension", "tracker-domains.js");
+                    string extensionDir = Path.Combine(repoRoot, "chrome-extension");
                     string[] domains = ProtectionEngine.GetBlocklistDomainsForExport();
-                    var sb = new System.Text.StringBuilder();
-                    sb.AppendLine("/**");
-                    sb.AppendLine(" * Generated from Privacy Monitor browser engines (ProtectionEngine + PrivacyEngine).");
-                    sb.AppendLine(" * Run: PrivacyMonitor.exe --export-blocklist");
-                    sb.AppendLine(" */");
-                    sb.AppendLine("const BLOCK_KNOWN_DOMAINS = [");
-                    foreach (var d in domains)
-                        sb.AppendLine("  \"" + d.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\",");
-                    sb.AppendLine("];");
-                    sb.AppendLine("const AGGRESSIVE_EXTRA_DOMAINS = [];");
-                    sb.AppendLine("function getDomainsForMode(mode) {");
-                    sb.AppendLine("  if (mode === 'off') return [];");
-                    sb.AppendLine("  return BLOCK_KNOWN_DOMAINS;");
-                    sb.AppendLine("}");
-                    sb.AppendLine("if (typeof self !== \"undefined\") {");
-                    sb.AppendLine("  self.BLOCK_KNOWN_DOMAINS = BLOCK_KNOWN_DOMAINS;");
-                    sb.AppendLine("  self.AGGRESSIVE_EXTRA_DOMAINS = AGGRESSIVE_EXTRA_DOMAINS;");
-                    sb.AppendLine("  self.getDomainsForMode = getDomainsForMode;");
-                    sb.AppendLine("}");
-                    string? dir = Path.GetDirectoryName(outPath);
-                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                        Directory.CreateDirectory(dir);
-                    File.WriteAllText(outPath, sb.ToString(), System.Text.Encoding.UTF8);
+                    ChromeExtensionExport.WriteAll(extensionDir, domains);
                 }
             }
             catch { }
@@ -109,7 +88,17 @@ public partial class App : Application
 
         static string? FindRepoRoot()
         {
+            // Prefer workspace root (has both chrome-extension and wpf-browser) so export writes to repo root chrome-extension.
             string? dir = AppContext.BaseDirectory;
+            while (dir != null)
+            {
+                if (Directory.Exists(Path.Combine(dir, "chrome-extension")) &&
+                    Directory.Exists(Path.Combine(dir, "wpf-browser")))
+                    return dir;
+                dir = Path.GetDirectoryName(dir);
+            }
+            // Fallback: first ancestor that contains chrome-extension (e.g. when repo is just wpf-browser with nested chrome-extension).
+            dir = AppContext.BaseDirectory;
             while (dir != null)
             {
                 if (Directory.Exists(Path.Combine(dir, "chrome-extension")))
@@ -163,8 +152,11 @@ public partial class App : Application
     private void ApplySystemTheme()
     {
         bool isDark = SystemThemeDetector.IsDarkMode;
+        bool useLarge = GetUseLargeAccessibilityUI();
+        string suffix = useLarge ? ".Large" : "";
+        string themeName = (isDark ? "Dark" : "Light") + suffix;
         var uri = new System.Uri(
-            $"pack://application:,,,/PrivacyMonitor;component/Themes/{(isDark ? "Dark" : "Light")}.xaml",
+            $"pack://application:,,,/PrivacyMonitor;component/Themes/{themeName}.xaml",
             System.UriKind.Absolute);
 
         if (_themeDictionary != null)
@@ -174,6 +166,31 @@ public partial class App : Application
 
         _themeDictionary = new ResourceDictionary { Source = uri };
         Resources.MergedDictionaries.Add(_themeDictionary);
+    }
+
+    private static bool GetUseLargeAccessibilityUI()
+    {
+        try
+        {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PrivacyMonitor");
+            string path = Path.Combine(dir, "settings.json");
+            if (!File.Exists(path)) return false;
+            string raw = File.ReadAllText(path);
+            if (string.IsNullOrWhiteSpace(raw)) return false;
+            using var doc = JsonDocument.Parse(raw);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("useLargeAccessibilityUI", out var val))
+                return val.ValueKind == JsonValueKind.True;
+        }
+        catch { }
+        return false;
+    }
+
+    /// <summary>Re-apply theme (e.g. after user changes "Use larger text and controls" in Settings). Call from MainWindow after SaveSettings.</summary>
+    public static void ReapplyTheme()
+    {
+        if (Current is App app)
+            app.ApplySystemTheme();
     }
 }
 

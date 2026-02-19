@@ -21,6 +21,9 @@ bld/
 *.userosscache
 *.sln.docstates
 
+# Cursor
+.cursor/
+
 # VS Code
 .vscode/*
 !.vscode/tasks.json

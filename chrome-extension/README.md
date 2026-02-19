@@ -2,23 +2,18 @@
 
 Chrome/Edge extension that uses the **same blocking engine** as the [Privacy Monitor](https://github.com/NullSec8/PrivacyMonitor) desktop browser (ProtectionEngine + PrivacyEngine). The blocklist is generated from the browser so behaviour matches 1:1.
 
-## Syncing the blocklist from the browser
+## Syncing the blocklist from the browser (C# only, no Node.js)
 
-From the repo root, build and run the desktop app with:
-
-```bash
-dotnet build PrivacyMonitor.csproj
-.\bin\Debug\net9.0-windows\win-x64\PrivacyMonitor.exe --export-blocklist
-```
-
-This overwrites `chrome-extension/tracker-domains.js` with the current engine blocklist. Then regenerate static rules:
+The extension uses the **same domain list** as the desktop app (ProtectionEngine + PrivacyEngine). The export is done in **C#** and writes all three files in one go: `tracker-domains.js`, `rules.json`, and `rules-stealth.json`. From the repo root:
 
 ```bash
-cd chrome-extension
-node generate-rules.js
+dotnet build wpf-browser/PrivacyMonitor.csproj
+dotnet run --project wpf-browser/PrivacyMonitor.csproj -- --export-blocklist
 ```
 
-Reload the extension in `chrome://extensions` after updating.
+Or run the published exe: `PrivacyMonitor.exe --export-blocklist`. This writes into `chrome-extension/` (repo root). Reload the extension in `chrome://extensions` after updating.
+
+**Optional:** If you prefer to regenerate only the rules from an existing `tracker-domains.js`, you can run `node generate-rules.js` in the `chrome-extension` folder (Node.js required for that path only). The C# export makes Node unnecessary for the normal workflow.
 
 ## Features
 

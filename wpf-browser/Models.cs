@@ -218,6 +218,10 @@ namespace PrivacyMonitor
         /// <summary>If true, send anonymous usage data (version, OS, protection level) to help improve the browser. No URLs or personal data.</summary>
         [JsonPropertyName("allowUsageData")]
         public bool AllowUsageData { get; set; } = true;
+
+        /// <summary>If true, use larger text and controls (accessibility). Default is false (compact, Chrome-like UI).</summary>
+        [JsonPropertyName("useLargeAccessibilityUI")]
+        public bool UseLargeAccessibilityUI { get; set; } = false;
     }
 
     public class PrivacyScore

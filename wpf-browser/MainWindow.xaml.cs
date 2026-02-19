@@ -316,6 +316,7 @@ namespace PrivacyMonitor
             string bp = _settings.BlockPopups ? " checked" : "";
             string hi = _settings.HideInPageAds ? " checked" : "";
             string usage = _settings.AllowUsageData ? " checked" : "";
+            string largeUi = _settings.UseLargeAccessibilityUI ? " checked" : "";
             string proxy = EscapeHtml(_settings.ProxyUrl ?? "");
             string msgContent = showSavedMessage ? "Saved. Restart or open a new tab to apply." : "";
             return $@"<!DOCTYPE html><html><head><meta name='color-scheme' content='light dark'/><meta charset='utf-8'/><title>Settings</title><style>
@@ -340,16 +341,17 @@ namespace PrivacyMonitor
             <div class='section'><label><input type='checkbox' id='blockPopups'{bp}/> Block pop-ups</label></div>
             <div class='section'><label><input type='checkbox' id='hideInPageAds'{hi}/> Hide in-page ads (cosmetic filter)</label></div>
             <div class='section'><label><input type='checkbox' id='allowUsageData'{usage}/> Help improve Privacy Monitor by sending anonymous usage data (version, OS, protection level). No URLs or personal data.</label></div>
+            <div class='section'><label><input type='checkbox' id='useLargeAccessibilityUI'{largeUi}/> Use larger text and controls (accessibility). Default is compact, Chrome-like. Page zoom (Ctrl+/Ctrl-) still works for web content.</label></div>
             <div class='section'><label>Proxy (optional — hides your IP from sites)</label><input type='text' id='proxyUrl' value='{proxy}' placeholder='e.g. http://127.0.0.1:8080 or socks5://127.0.0.1:1080'/></div>
             <button type='button' class='btn' id='save'>Save</button>
             <div id='msg'>{msgContent}</div>
             <script>
             (function(){{
-                var home=document.getElementById('homePage'), start=document.getElementById('startup'), search=document.getElementById('searchEngineUrl'), blockPopups=document.getElementById('blockPopups'), hideInPageAds=document.getElementById('hideInPageAds'), allowUsageData=document.getElementById('allowUsageData'), proxyUrl=document.getElementById('proxyUrl'), save=document.getElementById('save'), msgEl=document.getElementById('msg');
+                var home=document.getElementById('homePage'), start=document.getElementById('startup'), search=document.getElementById('searchEngineUrl'), blockPopups=document.getElementById('blockPopups'), hideInPageAds=document.getElementById('hideInPageAds'), allowUsageData=document.getElementById('allowUsageData'), useLargeUI=document.getElementById('useLargeAccessibilityUI'), proxyUrl=document.getElementById('proxyUrl'), save=document.getElementById('save'), msgEl=document.getElementById('msg');
                 save.onclick=function(ev){{
                     if(ev){{ ev.preventDefault(); ev.stopPropagation(); }}
                     var hp=(home.value||'').trim()||'about:welcome', st=start.value||'restore', se=(search.value||'').trim()||'https://duckduckgo.com/?q=', px=(proxyUrl&&proxyUrl.value)?proxyUrl.value.trim():'';
-                    var msg={{cat:'settings',homePage:hp,startup:st,searchEngineUrl:se,blockPopups:blockPopups.checked,hideInPageAds:hideInPageAds.checked,allowUsageData:!!(allowUsageData&&allowUsageData.checked),proxyUrl:px}}, j=JSON.stringify(msg);
+                    var msg={{cat:'settings',homePage:hp,startup:st,searchEngineUrl:se,blockPopups:blockPopups.checked,hideInPageAds:hideInPageAds.checked,allowUsageData:!!(allowUsageData&&allowUsageData.checked),useLargeAccessibilityUI:!!(useLargeUI&&useLargeUI.checked),proxyUrl:px}}, j=JSON.stringify(msg);
                     try{{
                         if(window.chrome&&window.chrome.webview&&window.chrome.webview.hostObjects&&window.chrome.webview.hostObjects.sync&&window.chrome.webview.hostObjects.sync.settingsBridge){{ window.chrome.webview.hostObjects.sync.settingsBridge.Save(j); return false; }}
                         if(window.chrome&&window.chrome.webview&&window.chrome.webview.postMessage){{ window.chrome.webview.postMessage(j); return false; }}
@@ -513,6 +515,7 @@ namespace PrivacyMonitor
                 if (root.TryGetProperty("blockPopups", out var bp)) _settings.BlockPopups = bp.ValueKind == JsonValueKind.True;
                 if (root.TryGetProperty("hideInPageAds", out var hi)) _settings.HideInPageAds = hi.ValueKind == JsonValueKind.True;
                 if (root.TryGetProperty("allowUsageData", out var au)) _settings.AllowUsageData = au.ValueKind == JsonValueKind.True;
+                if (root.TryGetProperty("useLargeAccessibilityUI", out var large)) _settings.UseLargeAccessibilityUI = large.ValueKind == JsonValueKind.True;
                 if (root.TryGetProperty("proxyUrl", out var px)) _settings.ProxyUrl = px.GetString() ?? "";
             }
             catch { }
@@ -535,6 +538,9 @@ namespace PrivacyMonitor
                 string proxyFile = ProxyPath();
                 string proxyValue = _settings.ProxyUrl?.Trim() ?? "";
                 File.WriteAllText(proxyFile, proxyValue);
+
+                // Re-apply theme so "Use larger text and controls" takes effect immediately
+                App.ReapplyTheme();
             }
             catch (Exception ex)
             {
@@ -727,16 +733,20 @@ namespace PrivacyMonitor
         private void ApplyTheme(bool isDark)
         {
             _isDarkTheme = isDark;
-            // Tab bar and tab header palette
-            TabBarBg = new SolidColorBrush(isDark ? Color.FromRgb(41, 42, 45) : Color.FromRgb(232, 236, 241));
-            TabActiveBg = new SolidColorBrush(isDark ? Color.FromRgb(53, 54, 58) : Colors.White);
-            TabActiveFg = new SolidColorBrush(isDark ? Color.FromRgb(232, 234, 237) : Color.FromRgb(15, 23, 42));
-            TabInactiveBg = new SolidColorBrush(isDark ? Color.FromRgb(41, 42, 45) : Color.FromRgb(226, 232, 240));
-            TabInactiveFg = new SolidColorBrush(isDark ? Color.FromRgb(154, 160, 166) : Color.FromRgb(71, 85, 105));
-            PillActive = new SolidColorBrush(isDark ? Color.FromRgb(94, 184, 217) : Color.FromRgb(8, 145, 178));
+            // Tab bar and tab header palette (aligned with Themes/Light.xaml and Dark.xaml)
+            TabBarBg = TryFindResource("TabBarBackground") as SolidColorBrush ?? new SolidColorBrush(isDark ? Color.FromRgb(37, 38, 40) : Color.FromRgb(255, 255, 255));
+            TabActiveBg = TryFindResource("CardBackground") as SolidColorBrush ?? new SolidColorBrush(isDark ? Color.FromRgb(44, 46, 51) : Colors.White);
+            TabActiveFg = TryFindResource("TextPrimary") as SolidColorBrush ?? new SolidColorBrush(isDark ? Color.FromRgb(232, 234, 237) : Color.FromRgb(15, 23, 42));
+            TabInactiveBg = new SolidColorBrush(isDark ? Color.FromRgb(44, 46, 51) : Color.FromRgb(241, 245, 249));
+            TabInactiveFg = TryFindResource("TextSecondary") as SolidColorBrush ?? new SolidColorBrush(isDark ? Color.FromRgb(166, 171, 176) : Color.FromRgb(71, 85, 105));
+            PillActive = TryFindResource("AccentLinkBrush") as SolidColorBrush ?? new SolidColorBrush(isDark ? Color.FromRgb(56, 189, 248) : Color.FromRgb(14, 165, 233));
             PillActiveFg = Brushes.White;
             PillInactive = Brushes.Transparent;
-            PillInactiveFg = new SolidColorBrush(isDark ? Color.FromRgb(154, 160, 166) : Color.FromRgb(95, 99, 104));
+            PillInactiveFg = TryFindResource("TextMuted") as SolidColorBrush ?? new SolidColorBrush(isDark ? Color.FromRgb(128, 134, 139) : Color.FromRgb(100, 116, 139));
+
+            // Tab bar chrome uses theme background
+            if (TabBarBorder != null)
+                TabBarBorder.Background = TabBarBg;
 
             // Refresh all tab headers so they use the new brushes
             foreach (var t in _tabs)
@@ -749,12 +759,13 @@ namespace PrivacyMonitor
             foreach (var tab in _tabs)
                 SetWebView2ColorScheme(tab, isDark);
 
-            // Address bar focus brush when not focused (in case we're re-applying)
+            // Address bar: reset to theme border when not focused
             if (AddressBarBorder != null && !AddressBar.IsFocused)
             {
-                AddressBarBorder.BorderBrush = new SolidColorBrush(isDark ? Color.FromRgb(95, 99, 104) : Color.FromRgb(226, 232, 240));
+                var borderBrush = TryFindResource("AddressBarBorderBrush") as System.Windows.Media.Brush;
+                AddressBarBorder.BorderBrush = borderBrush ?? new SolidColorBrush(isDark ? Color.FromRgb(74, 77, 82) : Color.FromRgb(203, 213, 225));
                 AddressBarBorder.BorderThickness = new Thickness(1);
-                AddressBarBorder.Effect = null;
+                AddressBarBorder.Effect = new DropShadowEffect { BlurRadius = 6, ShadowDepth = 0, Opacity = 0.06, Color = Colors.Black };
             }
         }
 
@@ -1244,7 +1255,7 @@ namespace PrivacyMonitor
         // ================================================================
         private Border BuildTabHeader(BrowserTab tab)
         {
-            // Domain initial badge (compact)
+            // Domain initial badge
             var initial = new TextBlock
             {
                 Text = "-", FontSize = 8, FontWeight = FontWeights.Bold, Foreground = Brushes.White,
@@ -1267,7 +1278,7 @@ namespace PrivacyMonitor
             };
             tab.TitleBlock = title;
 
-            // Close button (compact)
+            // Close button
             var closeBtn = new Button
             {
                 Content = "\u00D7", FontSize = 12, Width = 18, Height = 18,
@@ -1293,7 +1304,6 @@ namespace PrivacyMonitor
             string cid = tab.Id;
             closeBtn.Click += (_, _) => CloseTab(cid);
 
-            // Blocked badge (per-tab)
             var blockedText = new TextBlock
             {
                 Text = "0",
@@ -1318,7 +1328,6 @@ namespace PrivacyMonitor
             tab.BlockedBadge = blockedBadge;
             tab.BlockedBadgeText = blockedText;
 
-            // Heavy tab indicator (small dot/flame for high resource usage)
             var heavyBadge = new Border
             {
                 Width = 8,
@@ -3058,9 +3067,11 @@ namespace PrivacyMonitor
             UpdateAddressBarPlaceholder();
             if (AddressBarBorder != null)
             {
-                AddressBarBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(8, 145, 178));
+                var focusBrush = TryFindResource("AddressBarFocusBrush") as System.Windows.Media.Brush;
+                AddressBarBorder.BorderBrush = focusBrush ?? new SolidColorBrush(Color.FromRgb(14, 165, 233));
                 AddressBarBorder.BorderThickness = new Thickness(2);
-                AddressBarBorder.Effect = new DropShadowEffect { BlurRadius = 8, ShadowDepth = 0, Opacity = 0.15, Color = Color.FromRgb(8, 145, 178) };
+                var focusColor = (focusBrush as SolidColorBrush)?.Color ?? Color.FromRgb(14, 165, 233);
+                AddressBarBorder.Effect = new DropShadowEffect { BlurRadius = 10, ShadowDepth = 0, Opacity = 0.2, Color = focusColor };
             }
         }
 
@@ -3069,8 +3080,9 @@ namespace PrivacyMonitor
             UpdateAddressBarPlaceholder();
             if (AddressBarBorder != null)
             {
-                AddressBarBorder.BorderBrush = new SolidColorBrush(_isDarkTheme ? Color.FromRgb(95, 99, 104) : Color.FromRgb(226, 232, 240));
-                AddressBarBorder.BorderThickness = new Thickness(1);
+                var borderBrush = TryFindResource("AddressBarBorderBrush") as System.Windows.Media.Brush;
+                AddressBarBorder.BorderBrush = borderBrush ?? new SolidColorBrush(Color.FromRgb(203, 213, 225));
+                AddressBarBorder.BorderThickness = new Thickness(2);
                 AddressBarBorder.Effect = null;
             }
         }
@@ -3555,8 +3567,10 @@ namespace PrivacyMonitor
             for (int i = 0; i < _panels.Length; i++)
             {
                 _panels[i].Visibility = i == idx ? Visibility.Visible : Visibility.Collapsed;
-                _aTabButtons[i].Background = i == idx ? PillActive : PillInactive;
-                _aTabButtons[i].Foreground = i == idx ? PillActiveFg : PillInactiveFg;
+                var btn = _aTabButtons[i];
+                btn.Background = i == idx ? PillActive : PillInactive;
+                btn.Foreground = i == idx ? PillActiveFg : PillInactiveFg;
+                btn.FontWeight = i == idx ? FontWeights.SemiBold : FontWeights.Medium;
             }
         }
 
