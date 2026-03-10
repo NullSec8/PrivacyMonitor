@@ -46,7 +46,7 @@ namespace PrivacyMonitor
         public int ExtraWebRTCLeaks { get; init; } = 0;              // e.g., future
 
         public int PrivacyImpactScore { get; init; }
-        public string ProtectionGrade { get; init; }
+        public string ProtectionGrade { get; init; } = "";
     }
 
     public static class ThreatSimulation
@@ -73,10 +73,9 @@ namespace PrivacyMonitor
             var (uniqueRemovedTrackers, removedTrackerLabels) = ComputeUniqueTrackers(unprotReqs, protReqs);
             int extraTrackers = uniqueRemovedTrackers;
 
-            int extraTrackingCookies = Math.Max(
-                0,
-                PrivacyEngine.CountAllTrackingCookies(unprotected) - PrivacyEngine.CountAllTrackingCookies(protectedScan)
-            );
+            int unprotCookies = unprotected != null ? PrivacyEngine.CountAllTrackingCookies(unprotected) : 0;
+            int protCookies = protectedScan != null ? PrivacyEngine.CountAllTrackingCookies(protectedScan) : 0;
+            int extraTrackingCookies = Math.Max(0, unprotCookies - protCookies);
 
             var (diffStorage, diffStorageKeys) = ComputeStorageDifference(unprotStorage, protStorage);
             int extraStorageKeys = diffStorage;

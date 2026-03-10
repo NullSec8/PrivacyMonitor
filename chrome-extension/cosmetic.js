@@ -139,7 +139,12 @@
   });
 
   chrome.storage.onChanged.addListener(function(changes, area) {
-    if (area === 'local' && changes[STORAGE_KEY] && changes[STORAGE_KEY].newValue === 'off')
+    if (area !== 'local' || !changes[STORAGE_KEY]) return;
+    var newMode = changes[STORAGE_KEY].newValue;
+    if (newMode === 'off') {
       removeInjected();
+    } else if (!injectedStyle) {
+      injectCSS();
+    }
   });
 })();

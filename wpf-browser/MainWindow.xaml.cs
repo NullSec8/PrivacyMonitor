@@ -498,7 +498,7 @@ namespace PrivacyMonitor
                     catch { }
                 }
             }
-            catch { _settings = new AppSettings(); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Settings] LoadSettings failed, using defaults: {ex.Message}"); _settings = new AppSettings(); }
         }
 
         /// <summary>Apply form data from settings page (JSON). Used by both postMessage and host-object Save.</summary>
@@ -518,7 +518,7 @@ namespace PrivacyMonitor
                 if (root.TryGetProperty("useLargeAccessibilityUI", out var large)) _settings.UseLargeAccessibilityUI = large.ValueKind == JsonValueKind.True;
                 if (root.TryGetProperty("proxyUrl", out var px)) _settings.ProxyUrl = px.GetString() ?? "";
             }
-            catch { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Settings] ApplySettingsFromJson failed: {ex.Message}"); }
         }
 
         internal void SaveSettings()
@@ -669,6 +669,14 @@ namespace PrivacyMonitor
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             SystemThemeDetector.ThemeChanged -= OnSystemThemeChanged;
+            _uiTimer.Stop();
+
+            foreach (var tab in _tabs)
+            {
+                try { tab.WebView?.Dispose(); }
+                catch { }
+            }
+
             if (_isPrivate) return;
             try
             {
@@ -986,11 +994,24 @@ namespace PrivacyMonitor
             return AppContext.BaseDirectory;
         }
 
-        private static CoreWebView2EnvironmentOptions? BuildEnvironmentOptions(string? proxyUrl)
+        private static CoreWebView2EnvironmentOptions BuildEnvironmentOptions(string? proxyUrl)
         {
-            if (string.IsNullOrWhiteSpace(proxyUrl)) return null;
-            string arg = "--proxy-server=" + proxyUrl.Trim();
-            return new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = arg };
+            var args = new List<string>
+            {
+                "--disable-background-networking",
+                "--disable-client-side-phishing-detection",
+                "--disable-default-apps",
+                "--disable-domain-reliability",
+                "--disable-hang-monitor",
+                "--disable-sync",
+                "--metrics-recording-only",
+                "--no-first-run",
+                "--disable-breakpad",
+                "--block-new-web-contents"
+            };
+            if (!string.IsNullOrWhiteSpace(proxyUrl))
+                args.Add("--proxy-server=" + proxyUrl.Trim());
+            return new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = string.Join(" ", args) };
         }
 
         /// <summary>Set when WebView2 started without proxy because creation with proxy failed (e.g. 0x8007139F). UI can show a message.</summary>
@@ -1001,10 +1022,10 @@ namespace PrivacyMonitor
             _webView2StartedWithoutProxyFallback = false;
             var options = BuildEnvironmentOptions(proxyUrl);
             var env = await CreateWebView2EnvironmentCoreAsync(options, userDataFolderOverride);
-            // If proxy was set and creation failed (e.g. 0x8007139F), retry without proxy so the app can start
-            if (env == null && options != null && userDataFolderOverride == null)
+            // If proxy was set and creation failed, retry without proxy so the app can start
+            if (env == null && !string.IsNullOrWhiteSpace(proxyUrl) && userDataFolderOverride == null)
             {
-                env = await CreateWebView2EnvironmentCoreAsync(null, null);
+                env = await CreateWebView2EnvironmentCoreAsync(BuildEnvironmentOptions(null), null);
                 if (env != null) _webView2StartedWithoutProxyFallback = true;
             }
             if (env != null) return env;
@@ -1145,12 +1166,28 @@ namespace PrivacyMonitor
                 if (_webView2StartedWithoutProxyFallback && StatusText != null)
                     StatusText.Text = "Started without proxy (WebView2 failed with proxy). Try clearing proxy in Settings or use a different proxy.";
                 var cw = tab.WebView.CoreWebView2;
+
+                // ── SECURITY HARDENING ──
+                try
+                {
+                    cw.Settings.IsPasswordAutosaveEnabled = false;
+                    cw.Settings.IsGeneralAutofillEnabled = false;
+                    cw.Settings.IsStatusBarEnabled = false;
+                    cw.Settings.AreBrowserAcceleratorKeysEnabled = true;
+                    cw.Settings.IsSwipeNavigationEnabled = false;
+                    cw.Settings.IsPinchZoomEnabled = true;
+                    cw.Settings.IsReputationCheckingRequired = true;
+                    cw.Settings.HiddenPdfToolbarItems =
+                        CoreWebView2PdfToolbarItems.Save | CoreWebView2PdfToolbarItems.Print;
+                }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[WebView2] Settings hardening failed: {ex.Message}"); }
+
                 cw.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
                 cw.WebResourceRequested += (s, e) => OnWebResourceRequested(tab, e);
                 cw.WebResourceResponseReceived += (s, e) => OnWebResourceResponseReceived(tab, e);
                 cw.WebMessageReceived += (s, e) => OnWebMessage(tab, e);
-                try { cw.AddHostObjectToScript("settingsBridge", new SettingsSaveBridge(this, tab)); } catch { }
-                try { cw.AddHostObjectToScript("historyBridge", new HistoryClearBridge(this, tab)); } catch { }
+                try { cw.AddHostObjectToScript("settingsBridge", new SettingsSaveBridge(this, tab)); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[WebView2] AddHostObject settingsBridge failed: {ex.Message}"); }
+                try { cw.AddHostObjectToScript("historyBridge", new HistoryClearBridge(this, tab)); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[WebView2] AddHostObject historyBridge failed: {ex.Message}"); }
                 cw.NavigationStarting += (s, e) => OnNavigationStarting(tab, e);
                 cw.NavigationCompleted += (s, e) => OnNavigationCompleted(tab, e);
                 cw.DownloadStarting += (s, e) => OnDownloadStarting(tab, e);
@@ -1164,6 +1201,7 @@ namespace PrivacyMonitor
                     Dispatcher.Invoke(() => { _ = CreateNewTab(e.Uri); });
                 };
                 await cw.AddScriptToExecuteOnDocumentCreatedAsync(ProtectionEngine.ElementBlockerBootstrapScript);
+                await cw.AddScriptToExecuteOnDocumentCreatedAsync(ProtectionEngine.GpcSignalScript);
                 if (_settings.HideInPageAds)
                     await cw.AddScriptToExecuteOnDocumentCreatedAsync(ProtectionEngine.CosmeticFilterScript);
 
@@ -2156,10 +2194,12 @@ namespace PrivacyMonitor
                     try { e.Request.Headers.SetHeader("Referer", ""); } catch { }
                 }
 
-                // Do Not Track: signal to sites that user prefers not to be tracked (stronger privacy).
+                // Do Not Track + Global Privacy Control: signal privacy preference to sites.
                 if (!shouldCancelInBrowser && profile.Mode != ProtectionMode.Monitor)
                 {
                     try { e.Request.Headers.SetHeader("DNT", "1"); } catch { }
+                    try { e.Request.Headers.SetHeader("Sec-GPC", "1"); } catch { }
+                    try { e.Request.Headers.SetHeader("Upgrade-Insecure-Requests", "1"); } catch { }
                 }
 
                 // Adaptive learning: record tracker signals (exclude generic cross-site)
@@ -2204,6 +2244,37 @@ namespace PrivacyMonitor
             {
                 if (e?.Request == null || e?.Response == null) return;
                 var uri = e.Request.Uri; int statusCode = e.Response.StatusCode;
+
+                // Delete third-party cookies proactively
+                var profile = ProtectionEngine.GetProfile(tab.CurrentHost ?? "", GetProfileStore());
+                if (profile.Mode != ProtectionMode.Monitor)
+                {
+                    try
+                    {
+                        var reqHost = new Uri(uri).Host;
+                        bool isThirdParty = !string.IsNullOrEmpty(tab.CurrentHost) &&
+                            !reqHost.Equals(tab.CurrentHost, StringComparison.OrdinalIgnoreCase) &&
+                            !reqHost.EndsWith("." + tab.CurrentHost, StringComparison.OrdinalIgnoreCase);
+                        if (isThirdParty)
+                        {
+                            var cm = tab.WebView?.CoreWebView2?.CookieManager;
+                            if (cm != null)
+                            {
+                                _ = Task.Run(async () =>
+                                {
+                                    try
+                                    {
+                                        var cookies = await cm.GetCookiesAsync(uri);
+                                        foreach (var c in cookies) cm.DeleteCookie(c);
+                                    }
+                                    catch { }
+                                });
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
                 var respHeaders = new Dictionary<string, string>();
                 var iter = e.Response.Headers.GetEnumerator();
                 while (iter.MoveNext()) respHeaders[iter.Current.Key] = iter.Current.Value;
@@ -3108,7 +3179,8 @@ namespace PrivacyMonitor
             var tab = ActiveTab;
             var url = tab?.Url?.Trim() ?? "";
             if (string.IsNullOrEmpty(url) || url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)) return;
-            var title = (tab?.Title?.Trim() ?? "").Length > 0 ? tab!.Title.Trim() : (Uri.TryCreate(url, UriKind.Absolute, out var u) && u.IsAbsoluteUri ? (u.Host ?? "Page") : "Page");
+            var rawTitle = tab?.Title?.Trim() ?? "";
+            var title = rawTitle.Length > 0 ? rawTitle : (Uri.TryCreate(url, UriKind.Absolute, out var u) && u.IsAbsoluteUri ? (u.Host ?? "Page") : "Page");
             var existing = _bookmarks.FirstOrDefault(b => string.Equals(b.Url, url, StringComparison.OrdinalIgnoreCase));
             if (existing != null) { _bookmarks.Remove(existing); SaveBookmarks(); if (StatusText != null) StatusText.Text = "Bookmark removed."; }
             else { _bookmarks.Add(new BookmarkEntry { Title = title, Url = url }); SaveBookmarks(); if (StatusText != null) StatusText.Text = "Bookmark added."; }
@@ -3426,10 +3498,8 @@ namespace PrivacyMonitor
             var t = input.Trim();
             if (t.Contains(' ')) return false;
             if (t.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                t.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
-                t.StartsWith("file:", StringComparison.OrdinalIgnoreCase)) return true;
-            if (t.Contains("://")) return true;
-            if (t.Contains('.')) return true; // e.g. google.com, sub.domain.co.uk
+                t.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return true;
+            if (t.Contains('.') && !t.StartsWith('.') && !t.EndsWith('.')) return true;
             return false;
         }
 

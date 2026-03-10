@@ -1,11 +1,47 @@
+:root {
+  --bg: #f9fafb;
+  --bg-card: #f3f4f6;
+  --bg-hover: #e5e7eb;
+  --text: #1f2937;
+  --text-strong: #111827;
+  --text-muted: #6b7280;
+  --accent: #0891b2;
+  --accent-light: #0f766e;
+  --border: #d1d5db;
+  --border-light: #e5e7eb;
+  --statement-bg: #f0fdfa;
+  --statement-border: #99f6e4;
+  --danger: #b91c1c;
+  --btn-bg: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e;
+    --bg-card: #16213e;
+    --bg-hover: #0f3460;
+    --text: #e2e8f0;
+    --text-strong: #f1f5f9;
+    --text-muted: #94a3b8;
+    --accent: #5EB8D9;
+    --accent-light: #2dd4bf;
+    --border: #334155;
+    --border-light: #1e293b;
+    --statement-bg: #042f2e;
+    --statement-border: #115e59;
+    --danger: #ef4444;
+    --btn-bg: #1e293b;
+  }
+}
+
 body {
-  width: 320px;
-  max-height: 420px;
+  width: 340px;
+  max-height: 480px;
   margin: 0;
   font-family: "Segoe UI", system-ui, sans-serif;
   font-size: 13px;
-  color: #1f2937;
-  background: #f9fafb;
+  color: var(--text);
+  background: var(--bg);
   overflow-y: auto;
 }
 
@@ -15,76 +51,81 @@ body {
 
 .privacy-statement {
   font-size: 11px;
-  color: #0f766e;
-  background: #f0fdfa;
-  border: 1px solid #99f6e4;
-  border-radius: 6px;
+  color: var(--accent-light);
+  background: var(--statement-bg);
+  border: 1px solid var(--statement-border);
+  border-radius: 8px;
   padding: 8px 10px;
   margin: 0 0 10px 0;
+  line-height: 1.4;
 }
 
 .header {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .title {
   display: block;
-  font-weight: 600;
-  font-size: 16px;
-  color: #111827;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--text-strong);
+  letter-spacing: -0.3px;
 }
 
 .tagline {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .mode-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   margin-bottom: 12px;
 }
 
 .mode-option {
   display: flex;
   flex-direction: column;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
   cursor: pointer;
   transition: background 0.15s;
+  border: 1px solid transparent;
 }
 
 .mode-option:hover {
-  background: #f3f4f6;
+  background: var(--bg-card);
+  border-color: var(--border);
 }
 
 .mode-option input {
   margin: 0 8px 0 0;
   vertical-align: middle;
-  accent-color: #0891b2;
+  accent-color: var(--accent);
 }
 
 .mode-label {
   font-weight: 600;
   font-size: 13px;
-  color: #111827;
+  color: var(--text-strong);
   display: inline;
 }
 
 .mode-desc {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-muted);
   margin-top: 2px;
-  margin-left: 20px;
+  margin-left: 22px;
+  line-height: 1.4;
 }
 
 .mode-desc strong {
-  color: #0891b2;
+  color: var(--accent);
 }
 
 .mode-option input:checked + .mode-label {
-  color: #0891b2;
+  color: var(--accent);
 }
 
 .click-guard-option {
@@ -93,27 +134,28 @@ body {
   gap: 8px;
   margin-bottom: 10px;
   font-size: 12px;
-  color: #374151;
+  color: var(--text);
   cursor: pointer;
 }
 
 .click-guard-option input {
-  accent-color: #0891b2;
+  accent-color: var(--accent);
 }
 
 .ip-section {
-  background: #f3f4f6;
-  border-radius: 8px;
-  padding: 10px;
+  background: var(--bg-card);
+  border-radius: 10px;
+  padding: 10px 12px;
   margin-bottom: 10px;
+  border: 1px solid var(--border-light);
 }
 
 .ip-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #6b7280;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
   margin-bottom: 6px;
 }
 
@@ -124,10 +166,10 @@ body {
 }
 
 .ip-value {
-  font-family: ui-monospace, monospace;
+  font-family: ui-monospace, "Cascadia Code", monospace;
   font-size: 14px;
-  font-weight: 500;
-  color: #111827;
+  font-weight: 600;
+  color: var(--text-strong);
   flex: 1;
   min-width: 0;
   word-break: break-all;
@@ -137,56 +179,58 @@ body {
   flex-shrink: 0;
   width: 28px;
   height: 28px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: #fff;
-  color: #6b7280;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--btn-bg);
+  color: var(--text-muted);
   font-size: 16px;
   cursor: pointer;
   line-height: 1;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .ip-refresh:hover {
-  background: #e5e7eb;
-  color: #0891b2;
+  background: var(--bg-hover);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .ip-refresh:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .ip-status {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-muted);
   margin-top: 6px;
 }
 
 .ip-status.error {
-  color: #b91c1c;
+  color: var(--danger);
 }
 
 .analysis-section {
-  background: #f3f4f6;
-  border-radius: 8px;
-  padding: 10px;
+  background: var(--bg-card);
+  border-radius: 10px;
+  padding: 10px 12px;
   margin-bottom: 10px;
+  border: 1px solid var(--border-light);
 }
 
 .analysis-title {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #6b7280;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
   margin-bottom: 6px;
 }
 
 .analysis-loading,
 .analysis-error {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .analysis-result {
@@ -195,24 +239,27 @@ body {
 
 .analysis-count {
   margin-bottom: 6px;
-  color: #111827;
+  color: var(--text-strong);
 }
 
 .analysis-count strong {
-  color: #0891b2;
+  color: var(--accent);
 }
 
 .analysis-list {
-  max-height: 100px;
+  max-height: 120px;
   overflow-y: auto;
   font-size: 11px;
-  color: #4b5563;
-  font-family: ui-monospace, monospace;
+  color: var(--text-muted);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  border-radius: 6px;
+  background: var(--bg);
+  padding: 4px 6px;
 }
 
 .analysis-list div {
-  padding: 2px 0;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border-light);
 }
 
 .analysis-list div:last-child {
@@ -221,16 +268,20 @@ body {
 
 .actions {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
+  padding-top: 2px;
 }
 
 .actions a {
-  color: #0891b2;
+  color: var(--accent);
   text-decoration: none;
   font-size: 12px;
+  font-weight: 500;
+  transition: opacity 0.15s;
 }
 
 .actions a:hover {
   text-decoration: underline;
+  opacity: 0.8;
 }

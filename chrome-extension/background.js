@@ -69,7 +69,7 @@ async function updateBadge() {
   try {
     await chrome.action.setBadgeText({ text: text });
     await chrome.action.setBadgeBackgroundColor({ color: color });
-  } catch (e) {}
+  } catch (e) { console.warn('Privacy Monitor: updateBadge failed', e); }
 }
 
 chrome.runtime.onInstalled.addListener(async function() {

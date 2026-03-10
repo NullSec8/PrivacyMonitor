@@ -1,6 +1,9 @@
+using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace PrivacyMonitor;
 
@@ -10,27 +13,55 @@ namespace PrivacyMonitor;
 /// </summary>
 public static class ChromeExtensionExport
 {
-    // Block ALL resource types so the extension is strong: frames, images, scripts, XHR, fonts, ping, websocket, etc.
     private static readonly string[] ResourceTypesBlock =
     {
         "main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object",
         "xmlhttprequest", "ping", "csp_report", "media", "websocket", "other"
     };
-    // Stealth: redirect script/XHR to empty JS (lower priority so block wins when both match)
     private static readonly string[] ResourceTypesStealth = { "script", "xmlhttprequest" };
     private const string EmptyJs = "data:text/javascript,";
+
+    private static readonly Regex SafeDomainPattern = new(@"^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$", RegexOptions.Compiled);
+
+    private static void ValidateInputs(string extensionDir, string[] domains)
+    {
+        if (string.IsNullOrWhiteSpace(extensionDir))
+            throw new ArgumentException("Extension directory cannot be empty.", nameof(extensionDir));
+        if (domains == null)
+            throw new ArgumentNullException(nameof(domains));
+
+        var fullPath = Path.GetFullPath(extensionDir);
+        if (!fullPath.Equals(extensionDir, StringComparison.OrdinalIgnoreCase) &&
+            !Path.GetFullPath(extensionDir).Contains("chrome-extension", StringComparison.OrdinalIgnoreCase))
+        {
+            // Allow any valid resolved path but log a warning for unexpected locations
+            System.Diagnostics.Debug.WriteLine($"[ChromeExtensionExport] Writing to non-standard path: {fullPath}");
+        }
+    }
+
+    private static string SanitizeDomain(string domain)
+    {
+        var d = domain.Trim().ToLowerInvariant();
+        d = d.Replace("\r", "").Replace("\n", "").Replace("\"", "").Replace("\\", "");
+        if (d.Length > 253 || !SafeDomainPattern.IsMatch(d))
+            return "";
+        return d;
+    }
 
     /// <summary>Writes tracker-domains.js for the extension background script.</summary>
     public static void WriteTrackerDomainsJs(string extensionDir, string[] domains)
     {
+        ValidateInputs(extensionDir, domains);
+        var safeDomains = domains.Select(SanitizeDomain).Where(d => d.Length > 0).Distinct().ToArray();
+
         var sb = new StringBuilder();
         sb.AppendLine("/**");
         sb.AppendLine(" * Generated from Privacy Monitor browser engines (ProtectionEngine + PrivacyEngine).");
         sb.AppendLine(" * Run: PrivacyMonitor.exe --export-blocklist or dotnet run --project wpf-browser/ExportBlocklist");
         sb.AppendLine(" */");
         sb.AppendLine("const BLOCK_KNOWN_DOMAINS = [");
-        foreach (var d in domains)
-            sb.AppendLine("  \"" + d.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\",");
+        foreach (var d in safeDomains)
+            sb.AppendLine("  \"" + d + "\",");
         sb.AppendLine("];");
         sb.AppendLine("const AGGRESSIVE_EXTRA_DOMAINS = [];");
         sb.AppendLine("function getDomainsForMode(mode) {");
@@ -53,6 +84,9 @@ public static class ChromeExtensionExport
     /// <summary>Writes rules.json and rules-stealth.json for declarativeNetRequest (same format as generate-rules.js).</summary>
     public static void WriteDeclarativeNetRequestRules(string extensionDir, string[] domains)
     {
+        ValidateInputs(extensionDir, domains);
+        var safeDomains = domains.Select(SanitizeDomain).Where(d => d.Length > 0).Distinct().ToArray();
+
         if (!Directory.Exists(extensionDir))
             Directory.CreateDirectory(extensionDir);
 
@@ -60,9 +94,9 @@ public static class ChromeExtensionExport
 
         var rulesBlock = new List<object>();
         var rulesStealth = new List<object>();
-        for (var i = 0; i < domains.Length; i++)
+        for (var i = 0; i < safeDomains.Length; i++)
         {
-            var urlFilter = "||" + domains[i] + "^";
+            var urlFilter = "||" + safeDomains[i] + "^";
             rulesBlock.Add(new
             {
                 id = i + 1,

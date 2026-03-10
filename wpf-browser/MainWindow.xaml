@@ -85,11 +85,6 @@
             <Setter Property="BorderThickness" Value="2"/>
         </Style>
 
-        <LinearGradientBrush x:Key="HeaderGradient" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#E8EEF7" Offset="0"/>
-            <GradientStop Color="#FFFFFF" Offset="1"/>
-        </LinearGradientBrush>
-
         <LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,1">
             <GradientStop Color="#0D9488" Offset="0"/>
             <GradientStop Color="#0891B2" Offset="1"/>
@@ -374,9 +369,9 @@
                     <Border x:Name="AddressSuggestions" Visibility="Collapsed" CornerRadius="14" Background="{DynamicResource CardBackground}" Padding="10" Margin="10,4,10,0"
                             BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
                         <StackPanel>
-                            <TextBlock Text="Suggestions" FontSize="9" Foreground="#9AA0A6" FontFamily="Segoe UI"/>
-                            <TextBlock Text="example.com    Grade A" FontSize="11" Foreground="#202124" FontFamily="Segoe UI"/>
-                            <TextBlock Text="news.example    Grade B" FontSize="11" Foreground="#202124" FontFamily="Segoe UI"/>
+                            <TextBlock Text="Suggestions" FontSize="9" Foreground="{DynamicResource TextMuted}" FontFamily="Segoe UI"/>
+                            <TextBlock Text="example.com    Grade A" FontSize="11" Foreground="{DynamicResource TextPrimary}" FontFamily="Segoe UI"/>
+                            <TextBlock Text="news.example    Grade B" FontSize="11" Foreground="{DynamicResource TextPrimary}" FontFamily="Segoe UI"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -526,22 +521,22 @@
                                 <Ellipse x:Name="ScoreRing" Stroke="{DynamicResource ProtectionPillBackground}" StrokeThickness="12" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent"/>
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                     <TextBlock x:Name="GradeText" Text="--" FontSize="28" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" HorizontalAlignment="Center" FontFamily="Segoe UI"/>
-                                    <TextBlock Text="Grade" Style="{StaticResource TextCaption}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    <TextBlock Text="Grade" Style="{DynamicResource TextCaption}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
                                 </StackPanel>
                             </Grid>
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <TextBlock x:Name="ScoreNum" Text="-- / 100" Style="{StaticResource TextDisplay}"/>
-                                <TextBlock x:Name="ScoreSummary" Text="Visit a website to see your privacy score." Style="{StaticResource TextBody}"/>
-                                <TextBlock x:Name="SimpleSummaryText" Text="" Style="{StaticResource TextCaption}" Margin="0,4,0,0" FontStyle="Italic"/>
+                                <TextBlock x:Name="ScoreNum" Text="-- / 100" Style="{DynamicResource TextDisplay}"/>
+                                <TextBlock x:Name="ScoreSummary" Text="Visit a website to see your privacy score." Style="{DynamicResource TextBody}"/>
+                                <TextBlock x:Name="SimpleSummaryText" Text="" Style="{DynamicResource TextCaption}" Margin="0,4,0,0" FontStyle="Italic"/>
                             </StackPanel>
 
                             <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0">
                                 <Border Style="{StaticResource Chip}" Margin="0,0,0,6">
-                                    <TextBlock x:Name="ScoreChip" Text="Privacy Score" Style="{StaticResource TextLabel}"/>
+                                    <TextBlock x:Name="ScoreChip" Text="Privacy Score" Style="{DynamicResource TextLabel}"/>
                                 </Border>
                                 <Border Style="{StaticResource Chip}">
-                                    <TextBlock x:Name="TierChip" Text="Analyzing" Style="{StaticResource TextLabel}"/>
+                                    <TextBlock x:Name="TierChip" Text="Analyzing" Style="{DynamicResource TextLabel}"/>
                                 </Border>
                             </StackPanel>
                         </Grid>
@@ -555,12 +550,12 @@
                     </Border>
 
                     <Border x:Name="HighRiskWarningBorder" DockPanel.Dock="Top" Visibility="Collapsed" Background="{DynamicResource HighRiskWarningBackground}" Padding="20,16" Margin="16,0,16,10" CornerRadius="10" BorderBrush="{DynamicResource HighRiskWarningBorder}" BorderThickness="2">
-                        <TextBlock x:Name="HighRiskWarningText" Text="High risk – consider leaving this site or avoid entering sensitive data." Style="{StaticResource TextBody}" Foreground="{DynamicResource HighRiskWarningText}"/>
+                        <TextBlock x:Name="HighRiskWarningText" Text="High risk – consider leaving this site or avoid entering sensitive data." Style="{DynamicResource TextBody}" Foreground="{DynamicResource HighRiskWarningText}"/>
                     </Border>
 
                     <!-- Simple: one line. Expert: full grid -->
                     <Border x:Name="SimpleStatsBorder" DockPanel.Dock="Top" Background="{DynamicResource CardBackground}" Padding="20,16" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="0,0,0,2">
-                        <TextBlock x:Name="SimpleStatsText" Text="" Style="{StaticResource TextBody}" Foreground="{DynamicResource TextSecondary}" ToolTip="Quick numbers for this page"/>
+                        <TextBlock x:Name="SimpleStatsText" Text="" Style="{DynamicResource TextBody}" Foreground="{DynamicResource TextSecondary}" ToolTip="Quick numbers for this page"/>
                     </Border>
                     <Border x:Name="StatsGridBorder" DockPanel.Dock="Top" Background="{DynamicResource CardBackground}" Padding="16,14" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="0,0,0,2" Visibility="Collapsed">
                         <UniformGrid Columns="6">
@@ -661,7 +656,7 @@
                                                     <Border CornerRadius="10" Background="{DynamicResource CardSecondaryBackground}" Padding="10,8" Margin="0,0,0,6">
                                                         <DockPanel>
                                                             <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
-                                                                <TextBlock Text="{Binding Count}" FontSize="11" FontWeight="Bold" Foreground="#D93025" HorizontalAlignment="Right" FontFamily="Segoe UI"/>
+                                                                <TextBlock Text="{Binding Count}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" HorizontalAlignment="Right" FontFamily="Segoe UI"/>
                                                                 <TextBlock Text="{Binding ConfidenceLabel}" FontSize="8" Foreground="{Binding ConfidenceColor}" HorizontalAlignment="Right" FontFamily="Segoe UI"/>
                                                             </StackPanel>
                                                             <Border DockPanel.Dock="Left" Width="26" Height="26" CornerRadius="13" Background="{DynamicResource ChipBackground}" Margin="0,0,8,0">
@@ -945,7 +940,7 @@
                                         </TextBlock>
                                     </StackPanel>
                                 </Border>
-                                <TextBlock x:Name="ReportStatusText" Text="" FontSize="11" Foreground="#188038" TextWrapping="Wrap" Margin="2,6,0,0" FontFamily="Segoe UI"/>
+                                <TextBlock x:Name="ReportStatusText" Text="" FontSize="11" Foreground="{DynamicResource SuccessBrush}" TextWrapping="Wrap" Margin="2,6,0,0" FontFamily="Segoe UI"/>
                             </StackPanel>
 
                             <!-- FORENSICS -->
@@ -974,7 +969,7 @@
                                                 <Border.Effect><DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.05" Color="Black"/></Border.Effect>
                                                 <StackPanel>
                                                     <DockPanel>
-                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding RiskLevel}" FontSize="9" FontWeight="Bold" Foreground="#D93025" FontFamily="Segoe UI"/>
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding RiskLevel}" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" FontFamily="Segoe UI"/>
                                                         <TextBlock Text="{Binding ParameterName}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" FontFamily="Segoe UI"/>
                                                     </DockPanel>
                                                     <TextBlock Text="{Binding DomainsText}" FontSize="10" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" FontFamily="Segoe UI"/>
@@ -992,7 +987,7 @@
                                                 <Border.Effect><DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.05" Color="Black"/></Border.Effect>
                                                 <StackPanel>
                                                     <DockPanel>
-                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding RequestsLabel}" FontSize="10" FontWeight="Bold" Foreground="#D93025" FontFamily="Segoe UI"/>
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding RequestsLabel}" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" FontFamily="Segoe UI"/>
                                                         <TextBlock Text="{Binding Company}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" FontFamily="Segoe UI"/>
                                                     </DockPanel>
                                                     <TextBlock Text="{Binding ServicesText}" FontSize="10" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" FontFamily="Segoe UI"/>
@@ -1034,7 +1029,7 @@
                                                 <Border.Effect><DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.05" Color="Black"/></Border.Effect>
                                                 <StackPanel>
                                                     <DockPanel>
-                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding PenaltyText}" FontSize="11" FontWeight="Bold" Foreground="#D93025" FontFamily="Segoe UI"/>
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding PenaltyText}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" FontFamily="Segoe UI"/>
                                                         <TextBlock Text="{Binding Category}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" FontFamily="Segoe UI"/>
                                                     </DockPanel>
                                                     <TextBlock Text="{Binding Justification}" FontSize="10" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,2,0,0" FontFamily="Segoe UI"/>

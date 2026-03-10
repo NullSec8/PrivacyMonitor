@@ -24,7 +24,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3719.77" />
-    <PackageReference Include="WebView2.Runtime.X64" Version="114.0.1823.67" />
   </ItemGroup>
 
   <ItemGroup>

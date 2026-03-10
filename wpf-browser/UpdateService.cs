@@ -222,7 +222,14 @@ public static class UpdateService
             }
 
             if (Directory.Exists(extractDir)) Directory.Delete(extractDir, true);
-            ZipFile.ExtractToDirectory(zipFile, extractDir);
+            try
+            {
+                ZipFile.ExtractToDirectory(zipFile, extractDir);
+            }
+            catch (Exception ex)
+            {
+                return (null, $"Failed to extract update: {ex.Message}");
+            }
             try { File.Delete(zipFile); } catch { /* ignore, not critical */ }
 
             var exeInDir = FindExecutable(extractDir);
@@ -326,9 +333,9 @@ public static class UpdateService
             });
             success = true;
         }
-        catch
+        catch (Exception ex)
         {
-            // Could optionally log or show error here.
+            System.Diagnostics.Debug.WriteLine($"[UpdateService] Apply update failed: {ex.Message}");
             success = false;
         }
         return true;

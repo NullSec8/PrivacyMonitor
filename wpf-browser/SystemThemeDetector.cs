@@ -89,7 +89,7 @@ namespace PrivacyMonitor
                     {
                         try
                         {
-                            _uiInvoker.BeginInvoke(ThemeChanged, new object[] { null, EventArgs.Empty });
+                            _uiInvoker.BeginInvoke(ThemeChanged, new object?[] { null, EventArgs.Empty });
                         }
                         catch (Exception ex)
                         {

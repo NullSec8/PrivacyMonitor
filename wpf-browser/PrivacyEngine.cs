@@ -714,12 +714,18 @@ namespace PrivacyMonitor
 
         public static TrackerMatch? DetectTrackerFull(string host, string url)
         {
-            // 1) Direct O(1) domain lookup
-            foreach (var kv in TrackerLookup)
+            // 1) Direct O(1) domain lookup, then suffix walk
+            if (TrackerLookup.TryGetValue(host, out var directMatch))
+                return new TrackerMatch { Info = directMatch, MatchType = "domain", Confidence = 0.95 };
+
+            var h = host;
+            while (true)
             {
-                if (host.Equals(kv.Key, StringComparison.OrdinalIgnoreCase) ||
-                    host.EndsWith("." + kv.Key, StringComparison.OrdinalIgnoreCase))
-                    return new TrackerMatch { Info = kv.Value, MatchType = "domain", Confidence = 0.95 };
+                int dot = h.IndexOf('.');
+                if (dot < 0 || dot >= h.Length - 1) break;
+                h = h.Substring(dot + 1);
+                if (TrackerLookup.TryGetValue(h, out var suffixMatch))
+                    return new TrackerMatch { Info = suffixMatch, MatchType = "domain", Confidence = 0.95 };
             }
             // 1b) Static blocklist domain lookup (ads/trackers)
             if (ProtectionEngine.TryGetBlocklistEntry(host, out var bl))

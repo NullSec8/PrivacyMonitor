@@ -419,7 +419,14 @@ namespace PrivacyMonitor
                 }
 
                 var json = File.ReadAllText(BlocklistPath);
-                if (string.IsNullOrWhiteSpace(json)) return;
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    System.Diagnostics.Debug.WriteLine("[ProtectionEngine] Blocklist file is empty; loading defaults.");
+                    var defaults = GetDefaultBlocklistEntries();
+                    SaveBlocklist(defaults);
+                    json = File.ReadAllText(BlocklistPath);
+                    if (string.IsNullOrWhiteSpace(json)) return;
+                }
 
                 List<BlocklistEntry>? entries = null;
                 try
@@ -427,9 +434,13 @@ namespace PrivacyMonitor
                     var file = JsonSerializer.Deserialize<BlocklistFile>(json);
                     entries = file?.Entries ?? JsonSerializer.Deserialize<List<BlocklistEntry>>(json);
                 }
-                catch { return; }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ProtectionEngine] Failed to parse blocklist JSON: {ex.Message}");
+                    return;
+                }
 
-                if (entries == null) return;
+                if (entries == null || entries.Count == 0) return;
 
                 _staticBlocklist.Clear();
                 foreach (var e in entries.Where(e => !string.IsNullOrWhiteSpace(e.Domain)))
@@ -466,10 +477,26 @@ namespace PrivacyMonitor
 
                 _blocklistSuffixes = _staticBlocklist.Keys.OrderByDescending(k => k.Length).ToArray();
             }
-            catch
+            catch (Exception ex)
             {
-                _staticBlocklist.Clear();
-                _blocklistSuffixes = Array.Empty<string>();
+                System.Diagnostics.Debug.WriteLine($"[ProtectionEngine] LoadBlocklist failed: {ex.Message}");
+                if (_staticBlocklist.Count == 0)
+                {
+                    try
+                    {
+                        var defaults = GetDefaultBlocklistEntries();
+                        foreach (var e in defaults)
+                        {
+                            var domain = e.Domain.Trim().ToLowerInvariant();
+                            _staticBlocklist[domain] = e;
+                        }
+                        _blocklistSuffixes = _staticBlocklist.Keys.OrderByDescending(k => k.Length).ToArray();
+                    }
+                    catch
+                    {
+                        _blocklistSuffixes = Array.Empty<string>();
+                    }
+                }
             }
         }
 
@@ -818,14 +845,15 @@ namespace PrivacyMonitor
             new BlocklistEntry { Domain = "adblockanalytics.com", Label = "AdBlock Analytics", Category = "Ad" },
             };
 
-            // Enrich blocklist with all structured tracker domains from PrivacyEngine (global tracker DB).
+            var existing = new HashSet<string>(list.Select(e => e.Domain), StringComparer.OrdinalIgnoreCase);
+
             try
             {
                 foreach (var t in PrivacyEngine.GetTrackerDatabase())
                 {
                     if (string.IsNullOrWhiteSpace(t.Domain)) continue;
                     string domain = t.Domain.Trim().ToLowerInvariant();
-                    if (list.Any(e => e.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase)))
+                    if (!existing.Add(domain))
                         continue;
 
                     list.Add(new BlocklistEntry
@@ -839,7 +867,7 @@ namespace PrivacyMonitor
             }
             catch
             {
-                // If anything goes wrong, we still have the built-in list.
+                System.Diagnostics.Debug.WriteLine("[ProtectionEngine] Failed to enrich blocklist from PrivacyEngine tracker DB.");
             }
 
             return list;
@@ -1110,6 +1138,16 @@ namespace PrivacyMonitor
             return script.Replace("__PM_ARTIFACTS_JSON__", artifactsJs);
         }
 
+        /// <summary>Injects navigator.globalPrivacyControl = true and signals GPC via DOM API.</summary>
+        public const string GpcSignalScript = @"
+(function() {
+    'use strict';
+    if (window.__pmGPC) return;
+    window.__pmGPC = true;
+    try { Object.defineProperty(Navigator.prototype, 'globalPrivacyControl', { get: () => true, configurable: true, enumerable: true }); } catch(e) {}
+    try { document.addEventListener('securitypolicyviolation', function(e){ e.stopImmediatePropagation(); }, true); } catch(e) {}
+})();";
+
         // ════════════════════════════════════════════
         //  SCRIPT / ELEMENT BLOCKER (pre-page JS)
         // ════════════════════════════════════════════
@@ -1240,50 +1278,45 @@ namespace PrivacyMonitor
     try { _obs.observe(document.documentElement, { childList: true, subtree: true }); } catch(e) {}
 })();";
 
-        /// <summary>Hides in-page ad containers and sponsored links by common id/class/data patterns. Reduces pop-ups and href/display ads.</summary>
+        /// <summary>Hides in-page ad containers and sponsored links by common id/class/data patterns. Throttled MutationObserver for performance.</summary>
         public static string CosmeticFilterScript => @"
 (function() {
     if (window.__pmCosmetic) return;
     window.__pmCosmetic = true;
     const _hidden = new WeakSet();
-    const _idClassPatterns = ['adsbygoogle','ad-container','ad_container','adcontainer','advertisement','ad-slot','ad_slot','adslot','ad-wrapper','ad_wrapper','adbox','ad-box','ad_area','ad-area','adplaceholder','ad-placeholder','ad-sense','adsense','google_ad','ins.adsbygoogle','sponsored','commercial','banner-ad','banner_ad','sidebar-ad','sidebar_ad','ad-placement','adplacement','ad-unit','adunit','ad-superbanner','ad-sky','ad-leaderboard','ad-interstitial','ad-overlay','ad-popup','adblock','ad-block','adblocker','outbrain','taboola','revcontent','content-ad','native-ad','promoted-content','dfp-ad','doubleclick','advertisement-label','ad-label','adlabel'];
-    const _dataAttrs = ['data-ad', 'data-ad-slot', 'data-google-query-id', 'data-ad-status', 'data-ad-unit', 'data-ad-format'];
+    const _pats = ['adsbygoogle','ad-container','ad_container','adcontainer','advertisement','ad-slot','ad_slot','adslot','ad-wrapper','ad_wrapper','adbox','ad-box','ad_area','ad-area','adplaceholder','ad-placeholder','ad-sense','adsense','google_ad','sponsored','commercial','banner-ad','banner_ad','sidebar-ad','sidebar_ad','ad-placement','adplacement','ad-unit','adunit','ad-superbanner','ad-sky','ad-leaderboard','ad-interstitial','ad-overlay','ad-popup','outbrain','taboola','revcontent','content-ad','native-ad','promoted-content','dfp-ad','doubleclick','advertisement-label','ad-label','adlabel','mgid','zergnet','criteo','media-net','prebid','gpt-ad','div-gpt-ad','ad-holder','ad-zone','adzone','ad-space','ad-block','ad-break','ad-sense','google-ad','sticky-ad','floating-ad','billboard-ad','rectangle-ad','leaderboard-ad','skyscraper-ad','interstitial-ad','video-ad','player-ad','companion-ad','ima-ad'];
+    const _dataAttrs = ['data-ad','data-ad-slot','data-google-query-id','data-ad-status','data-ad-unit','data-ad-format','data-ad-type','data-ad-preview','data-advertisement'];
+    const _iframePats = ['doubleclick','googlesyndication','adservice','/pagead/','adsbygoogle','adnxs','criteo','outbrain','taboola','revcontent','mgid','media.net','amazon-adsystem'];
     function _matchesAd(el) {
         if (!el || el.nodeType !== 1) return false;
         try {
             var id = (el.id || '').toLowerCase(), cls = (el.className && typeof el.className === 'string' ? el.className : '').toLowerCase();
-            for (var i = 0; i < _idClassPatterns.length; i++)
-                if (id.indexOf(_idClassPatterns[i]) >= 0 || cls.indexOf(_idClassPatterns[i]) >= 0) return true;
-            for (var j = 0; j < _dataAttrs.length; j++)
-                if (el.getAttribute && el.getAttribute(_dataAttrs[j]) !== null) return true;
-            if (el.tagName === 'IFRAME' && el.src) {
-                var s = (el.src || '').toLowerCase();
-                if (s.indexOf('doubleclick') >= 0 || s.indexOf('googlesyndication') >= 0 || s.indexOf('adservice') >= 0 || s.indexOf('/pagead/') >= 0 || s.indexOf('adsbygoogle') >= 0 || s.indexOf('adnxs') >= 0 || s.indexOf('criteo') >= 0 || s.indexOf('outbrain') >= 0 || s.indexOf('taboola') >= 0 || s.indexOf('revcontent') >= 0) return true;
-            }
+            for (var i = 0; i < _pats.length; i++) { var p = _pats[i]; if (id.indexOf(p) >= 0 || cls.indexOf(p) >= 0) return true; }
+            for (var j = 0; j < _dataAttrs.length; j++) if (el.getAttribute && el.getAttribute(_dataAttrs[j]) !== null) return true;
+            if (el.tagName === 'INS' && cls.indexOf('adsbygoogle') >= 0) return true;
+            if (el.tagName === 'IFRAME' && el.src) { var s = el.src.toLowerCase(); for (var k = 0; k < _iframePats.length; k++) if (s.indexOf(_iframePats[k]) >= 0) return true; }
         } catch(e) {}
         return false;
     }
-    function _hideAdLike(root) {
+    function _hide(el) { if (_hidden.has(el)) return; if (_matchesAd(el)) { el.style.setProperty('display','none','important'); el.setAttribute('data-pm-hidden','1'); _hidden.add(el); } }
+    function _scan(root) {
         try {
-            var list = (root || document).querySelectorAll ? (root || document).querySelectorAll('*') : [];
-            for (var i = 0; i < list.length; i++) {
-                var el = list[i];
-                if (_hidden.has(el)) continue;
-                if (_matchesAd(el)) {
-                    el.style.setProperty('display', 'none', 'important');
-                    el.setAttribute('data-pm-hidden', '1');
-                    _hidden.add(el);
-                }
-            }
+            if (root && root.nodeType === 1) _hide(root);
+            var list = (root || document).querySelectorAll ? (root || document).querySelectorAll('[class],[id],[data-ad],[data-ad-slot],[data-google-query-id],ins.adsbygoogle,iframe[src]') : [];
+            for (var i = 0; i < list.length; i++) _hide(list[i]);
         } catch(e) {}
     }
+    var _pending = false;
+    function _flush() { _pending = false; _scan(document); }
+    function _schedScan() { if (!_pending) { _pending = true; requestAnimationFrame(_flush); } }
     function _run() {
-        _hideAdLike(document);
+        _scan(document);
         try {
             var obs = new MutationObserver(function(mutations) {
-                for (var m = 0; m < mutations.length; m++)
-                    for (var n = 0; n < (mutations[m].addedNodes || []).length; n++)
-                        _hideAdLike(mutations[m].addedNodes[n]);
+                for (var m = 0; m < mutations.length; m++) {
+                    var nodes = mutations[m].addedNodes;
+                    if (nodes) for (var n = 0; n < nodes.length; n++) { var nd = nodes[n]; if (nd.nodeType === 1) { _hide(nd); if (nd.childElementCount > 0) _schedScan(); } }
+                }
             });
             obs.observe(document.documentElement, { childList: true, subtree: true });
         } catch(e) {}

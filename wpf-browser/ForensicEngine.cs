@@ -103,7 +103,8 @@ namespace PrivacyMonitor
             }
 
             // Cookie header values (slightly lower bar 3.6 for stronger detection)
-            if (req.RequestHeaders.TryGetValue("cookie", out var cookieStr))
+            var headers = req.RequestHeaders ?? new Dictionary<string, string>();
+            if (headers.TryGetValue("cookie", out var cookieStr))
             {
                 foreach (var cookie in cookieStr.Split(';'))
                 {
@@ -118,7 +119,7 @@ namespace PrivacyMonitor
             }
 
             // Referer URL params: same identifiers can appear in redirect URLs
-            if (req.RequestHeaders.TryGetValue("referer", out var referer) && !string.IsNullOrEmpty(referer))
+            if (headers.TryGetValue("referer", out var referer) && !string.IsNullOrEmpty(referer))
             {
                 int rq = referer.IndexOf('?');
                 if (rq >= 0 && rq < referer.Length - 1)
@@ -176,8 +177,11 @@ namespace PrivacyMonitor
             List<ForensicEvent> timeline,
             Dictionary<string, DataFlowEdge>? edgeLookup = null)
         {
+            var reqHeaders = req.RequestHeaders ?? new Dictionary<string, string>();
+            var resHeaders = req.ResponseHeaders ?? new Dictionary<string, string>();
+
             // Referer-based flow: if referer domain differs from request domain
-            if (req.RequestHeaders.TryGetValue("referer", out var referer) && referer.Length > 0)
+            if (reqHeaders.TryGetValue("referer", out var referer) && referer.Length > 0)
             {
                 try
                 {
@@ -190,7 +194,7 @@ namespace PrivacyMonitor
             }
 
             // Origin header: explicit first-party -> third-party flow (stronger signal)
-            if (req.RequestHeaders.TryGetValue("origin", out var origin) && origin.Length > 0)
+            if (reqHeaders.TryGetValue("origin", out var origin) && origin.Length > 0)
             {
                 try
                 {
@@ -205,13 +209,13 @@ namespace PrivacyMonitor
             // Page -> third-party flow
             if (req.IsThirdParty && !string.IsNullOrEmpty(pageHost))
             {
-                string mechanism = req.RequestHeaders.ContainsKey("cookie") ? "cookie_propagation" : (req.HasBody ? "post_data" : "get_request");
+                string mechanism = reqHeaders.ContainsKey("cookie") ? "cookie_propagation" : (req.HasBody ? "post_data" : "get_request");
                 AddOrUpdateEdge(edges, pageHost, req.Host, mechanism, $"{pageHost} sends data to {req.Host} via {mechanism}", edgeLookup);
             }
 
             // Redirect flow (detected by 3xx status from a different domain)
             if (req.StatusCode >= 300 && req.StatusCode < 400 &&
-                req.ResponseHeaders.TryGetValue("location", out var location) && location.Length > 0)
+                resHeaders.TryGetValue("location", out var location) && location.Length > 0)
             {
                 try
                 {
