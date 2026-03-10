@@ -52,6 +52,9 @@ namespace PrivacyMonitor.NetworkInterceptor
             ClearCommand = new RelayCommand(Clear);
             CopyUrlCommand = new RelayCommand(CopyUrl, () => SelectedRequest != null);
             BlockDomainCommand = new RelayCommand(BlockDomain, () => SelectedRequest != null);
+            AddBlockPathRuleCommand = new RelayCommand(AddBlockPathRule, () => SelectedRequest != null);
+            AddForceHttpsRuleCommand = new RelayCommand(AddForceHttpsRule, () => SelectedRequest != null);
+            AddStripRefererRuleCommand = new RelayCommand(AddStripRefererRule, () => SelectedRequest != null);
             ExportRequestCommand = new RelayCommand(ExportSelectedRequest, () => SelectedRequest != null);
             ExportSessionCommand = new RelayCommand(ExportFullSession);
             ReplayRequestCommand = new RelayCommand(ReplayRequestAsync, () => SelectedRequest != null && !_isReplaying);
@@ -60,6 +63,7 @@ namespace PrivacyMonitor.NetworkInterceptor
             ReplaySelectedWithModifyCommand = new RelayCommand<object?>(ReplaySelectedWithModify, _ => _selectedRequests.Count > 0 && !_isReplaying);
             ExportSessionChunkedCommand = new RelayCommand(ExportFullSessionChunked, () => !_exportInProgress);
             ExportSessionStreamingCommand = new RelayCommand(ExportSessionStreamingAsync, () => !_exportInProgress);
+            ExportHarCommand = new RelayCommand(ExportSessionAsHar);
             CancelExportCommand = new RelayCommand(CancelExport, () => _exportInProgress);
             ChartSamples = new ObservableCollection<MetricSample>();
             TopDomainsByHighRisk = new ObservableCollection<DomainRiskItem>();
@@ -99,6 +103,9 @@ namespace PrivacyMonitor.NetworkInterceptor
         public RelayCommand ClearCommand { get; }
         public RelayCommand CopyUrlCommand { get; }
         public RelayCommand BlockDomainCommand { get; }
+        public RelayCommand AddBlockPathRuleCommand { get; }
+        public RelayCommand AddForceHttpsRuleCommand { get; }
+        public RelayCommand AddStripRefererRuleCommand { get; }
         public RelayCommand ExportRequestCommand { get; }
         public RelayCommand ExportSessionCommand { get; }
         public RelayCommand ReplayRequestCommand { get; }
@@ -107,6 +114,7 @@ namespace PrivacyMonitor.NetworkInterceptor
         public RelayCommand<object?> ReplaySelectedWithModifyCommand { get; }
         public RelayCommand ExportSessionChunkedCommand { get; }
         public RelayCommand ExportSessionStreamingCommand { get; }
+        public RelayCommand ExportHarCommand { get; }
         public RelayCommand CancelExportCommand { get; }
 
         public bool ExportInProgress { get => _exportInProgress; private set { _exportInProgress = value; OnPropertyChanged(nameof(ExportInProgress)); System.Windows.Input.CommandManager.InvalidateRequerySuggested(); } }
@@ -159,6 +167,7 @@ namespace PrivacyMonitor.NetworkInterceptor
         }
 
         public event Action<string>? BlockDomainRequested;
+        public event Action<InterceptorQuickRuleRequest>? QuickRuleRequested;
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -422,6 +431,33 @@ namespace PrivacyMonitor.NetworkInterceptor
             BlockDomainRequested?.Invoke(SelectedRequest.Domain);
         }
 
+        private void AddBlockPathRule()
+        {
+            if (SelectedRequest == null) return;
+            var token = SelectedRequest.Path ?? "";
+            if (token.Contains('?')) token = token[..token.IndexOf('?')];
+            if (token.StartsWith("/")) token = token[1..];
+            if (token.Contains('/')) token = token[..token.IndexOf('/')];
+            if (string.IsNullOrWhiteSpace(token)) token = "track";
+            QuickRuleRequested?.Invoke(new InterceptorQuickRuleRequest { Action = InterceptorQuickRuleAction.BlockPathContains, Value = token });
+        }
+
+        private void AddForceHttpsRule()
+        {
+            if (SelectedRequest?.Domain == null) return;
+            QuickRuleRequested?.Invoke(new InterceptorQuickRuleRequest { Action = InterceptorQuickRuleAction.ForceHttps, Value = SelectedRequest.Domain });
+        }
+
+        private void AddStripRefererRule()
+        {
+            QuickRuleRequested?.Invoke(new InterceptorQuickRuleRequest
+            {
+                Action = InterceptorQuickRuleAction.RewriteHeader,
+                HeaderName = "Referer",
+                HeaderValue = ""
+            });
+        }
+
         private void ExportSelectedRequest()
         {
             if (SelectedRequest == null) return;
@@ -468,6 +504,70 @@ namespace PrivacyMonitor.NetworkInterceptor
             catch (Exception ex)
             {
                 StatusText = $"Export failed: {ex.Message}";
+            }
+        }
+
+        private void ExportSessionAsHar()
+        {
+            try
+            {
+                var list = Requests.ToList();
+                if (list.Count == 0) { StatusText = "No requests to export."; return; }
+
+                var entries = new List<object>();
+                foreach (var r in list)
+                {
+                    var reqHeaders = r.RequestHeaders?.Select(kv => new { name = kv.Key, value = kv.Value }).ToList() ?? new();
+                    var respHeaders = r.ResponseHeaders?.Select(kv => new { name = kv.Key, value = kv.Value }).ToList() ?? new();
+
+                    entries.Add(new
+                    {
+                        startedDateTime = r.Timestamp.ToString("o"),
+                        time = r.DurationMs,
+                        request = new
+                        {
+                            method = r.Method ?? "GET",
+                            url = r.FullUrl ?? "",
+                            httpVersion = "HTTP/1.1",
+                            headers = reqHeaders,
+                            queryString = Array.Empty<object>(),
+                            headersSize = -1,
+                            bodySize = -1
+                        },
+                        response = new
+                        {
+                            status = r.StatusCode,
+                            statusText = "",
+                            httpVersion = "HTTP/1.1",
+                            headers = respHeaders,
+                            content = new { size = r.ResponseSize, mimeType = r.ContentType ?? "", text = r.ResponsePreview ?? "" },
+                            headersSize = -1,
+                            bodySize = r.ResponseSize
+                        },
+                        cache = new { },
+                        timings = new { send = 0, wait = r.DurationMs, receive = 0 },
+                        _privacyMonitor = new { isTracker = r.IsTracker, isThirdParty = r.IsThirdParty, riskScore = r.RiskScore, riskLevel = r.RiskLevel ?? "", category = r.Category ?? "" }
+                    });
+                }
+
+                var har = new
+                {
+                    log = new
+                    {
+                        version = "1.2",
+                        creator = new { name = "Privacy Monitor Network Interceptor", version = "1.0" },
+                        entries
+                    }
+                };
+
+                var json = JsonSerializer.Serialize(har, new JsonSerializerOptions { WriteIndented = true });
+                var path = Path.Combine(Path.GetTempPath(), $"interceptor_{DateTime.UtcNow:yyyyMMddHHmmss}.har");
+                File.WriteAllText(path, json);
+                StatusText = $"HAR exported ({list.Count} entries) → {path}";
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"HAR export failed: {ex.Message}";
             }
         }
 

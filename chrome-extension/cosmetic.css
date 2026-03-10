@@ -141,6 +141,33 @@ aside[class*="ad" i],aside[id*="ad-"],
 [aria-label="Advertisement" i],[aria-label="Ad" i],[aria-label="Sponsored" i],
 [title="Advertisement" i],[title="Banner Ads" i],
 
+/* ── YouTube-specific ── */
+ytd-promoted-sparkles-web-renderer,ytd-promoted-video-renderer,
+ytd-display-ad-renderer,ytd-companion-slot-renderer,
+ytd-action-companion-ad-renderer,ytd-in-feed-ad-layout-renderer,
+ytd-ad-slot-renderer,ytd-banner-promo-renderer,
+ytd-statement-banner-renderer,ytd-brand-video-singleton-renderer,
+ytd-brand-video-shelf-renderer,ytd-search-pyv-renderer,
+ytd-compact-promoted-video-renderer,
+ytd-promoted-sparkles-text-search-renderer,
+#player-ads,#masthead-ad,#ad_creative_3,
+.ytp-ad-module,.ytp-ad-overlay-container,.ytp-ad-text-overlay,
+.ytp-ad-skip-button-container,.ytp-ad-feedback-dialog-container,
+.ytp-ad-image-overlay,.ytp-suggested-action,.ytp-cards-teaser,
+.iv-branding,#offer-module,.ytd-merch-shelf-renderer,
+tp-yt-paper-dialog:has(yt-mealbar-promo-renderer),
+
+/* ── Social media promoted content ── */
+[data-testid="placementTracking"],[data-testid*="promoted"],
+[class*="promoted-trend" i],[class*="promoted-tweet" i],
+[class*="fbAdUnit"],[class*="userContentWrapper"][class*="promoted"],
+[class*="pam"][class*="_51mz"],
+[class*="instagram-ad" i],[class*="igAd"],
+
+/* ── Shopping & e-commerce ads ── */
+[class*="shopping-ad" i],[class*="product-ad" i],[class*="shop-ad" i],
+[class*="price-grid-ad" i],[class*="product-listing-ad" i],
+
 /* ── Empty ad placeholders (cleanup) ── */
 div[class*="ad-" i]:empty,div[class*="ads-" i]:empty,
 div[id*="ad-" i]:empty,div[id*="ads-" i]:empty,

@@ -121,6 +121,7 @@ namespace PrivacyMonitor
         private bool _expertMode = false;
         private bool _antiFpEnabled = true;
         private bool _adBlockEnabled = true;
+        private bool _suppressSidebarControlEvents;
         private readonly DispatcherTimer _uiTimer;
         // Idle tab sleep (performance & resource control)
         private readonly TimeSpan _idleBeforeSleep = TimeSpan.FromMinutes(15);
@@ -395,8 +396,8 @@ namespace PrivacyMonitor
         public MainWindow()
         {
             InitializeComponent();
-            _aTabButtons = new[] { ATab0, ATab1, ATab2, ATab3, ATab4, ATab5, ATab6 };
-            _panels = new UIElement[] { Panel0, Panel1, Panel2, Panel3, Panel4, Panel5, Panel6 };
+            _aTabButtons = new[] { ATab0, ATab1, ATab2, ATab3, ATab4, ATab5, ATab6, ATab7 };
+            _panels = new UIElement[] { Panel0, Panel1, Panel2, Panel3, Panel4, Panel5, Panel6, Panel7 };
             SwitchAnalysisTab(0);
             Loaded += (_, _) =>
             {
@@ -912,6 +913,8 @@ namespace PrivacyMonitor
             _adBlockEnabled = profile.BlockAdsTrackers;
             UpdateAntiFpButton();
             UpdateAdBlockButton();
+            SyncSidebarProtectionControls(profile);
+            RefreshRulesPanel(tab);
 
             // Update blocked badge
             if (tab.BlockedCount > 0)
@@ -958,6 +961,25 @@ namespace PrivacyMonitor
             AdBlockBtn.ToolTip = _adBlockEnabled
                 ? "Ad/Tracker blocking: ON (click to disable)"
                 : "Ad/Tracker blocking: OFF (click to enable)";
+        }
+
+        private void SyncSidebarProtectionControls(SiteProfile profile)
+        {
+            _suppressSidebarControlEvents = true;
+            if (SidebarProtectionModeCombo != null)
+                SidebarProtectionModeCombo.SelectedIndex = (int)profile.Mode;
+            if (FpStrictnessCombo != null)
+                FpStrictnessCombo.SelectedIndex = profile.FingerprintStrictness switch
+                {
+                    FingerprintStrictness.Safe => 0,
+                    FingerprintStrictness.Balanced => 1,
+                    FingerprintStrictness.BreakThings => 2,
+                    _ => 1
+                };
+            if (SidebarAntiFpToggle != null) SidebarAntiFpToggle.IsChecked = profile.AntiFingerprint;
+            if (SidebarAdBlockToggle != null) SidebarAdBlockToggle.IsChecked = profile.BlockAdsTrackers;
+            if (SidebarBehavioralToggle != null) SidebarBehavioralToggle.IsChecked = profile.BlockBehavioral;
+            _suppressSidebarControlEvents = false;
         }
 
         // ================================================================
@@ -1916,7 +1938,8 @@ namespace PrivacyMonitor
                     bool antiFpEnabled = profile.Mode != ProtectionMode.Monitor;
                     if (antiFpEnabled)
                     {
-                        tab.AntiFpScriptId = await cw.AddScriptToExecuteOnDocumentCreatedAsync(ProtectionEngine.AntiFingerPrintScript);
+                        tab.AntiFpScriptId = await cw.AddScriptToExecuteOnDocumentCreatedAsync(
+                            ProtectionEngine.GetAntiFingerPrintScript(profile.FingerprintStrictness, tab.CurrentHost));
                         tab.AntiFingerprintInjected = true;
                         try { cw.Settings.UserAgent = ProtectionEngine.BlendInUserAgent; } catch { }
                     }
@@ -2146,7 +2169,44 @@ namespace PrivacyMonitor
 
                 // ── ACTIVE PROTECTION: Evaluate blocking decision ──
                 var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
-                var decision = ProtectionEngine.ShouldBlock(entry, tab.CurrentHost, profile);
+                var ruleDecision = SiteRulesEngine.Evaluate(tab.CurrentHost ?? "", entry, uri);
+                if (!string.IsNullOrWhiteSpace(ruleDecision.RewriteHeaderName))
+                {
+                    try { e.Request.Headers.SetHeader(ruleDecision.RewriteHeaderName, ruleDecision.RewriteHeaderValue ?? ""); } catch { }
+                }
+
+                if (ruleDecision.ForceHttps && uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var httpsUrl = "https://" + uri.Host + uri.PathAndQuery;
+                        if (e.ResourceContext == CoreWebView2WebResourceContext.Document)
+                        {
+                            Dispatcher.BeginInvoke(() => tab.WebView?.CoreWebView2?.Navigate(httpsUrl));
+                        }
+                        var response = tab.WebView?.CoreWebView2?.Environment.CreateWebResourceResponse(
+                            null, 307, "Forced HTTPS by rule", "Location: " + httpsUrl);
+                        if (response != null)
+                        {
+                            e.Response = response;
+                            entry.IsBlocked = true;
+                            entry.BlockReason = "Rule: force HTTPS";
+                            entry.BlockCategory = "Security";
+                            entry.BlockConfidence = 1.0;
+                        }
+                    }
+                    catch { }
+                }
+
+                var decision = ProtectionEngine.ShouldBlock(entry, tab.CurrentHost ?? "", profile);
+                if (ruleDecision.Blocked)
+                {
+                    decision.Blocked = true;
+                    decision.Reason = string.IsNullOrWhiteSpace(ruleDecision.Reason) ? "Rule matched" : ruleDecision.Reason;
+                    decision.Category = "Rule";
+                    decision.Confidence = 1.0;
+                    decision.TrackerLabel = "User rule";
+                }
 
                 // In Monitor mode only the browser cancels requests (e.g. navigation); we never block.
                 bool shouldCancelInBrowser = decision.Blocked && profile.Mode != ProtectionMode.Monitor;
@@ -2220,7 +2280,7 @@ namespace PrivacyMonitor
                             ProtectionEngine.ObserveTrackerSignal(reqHost, sig.SignalType, sig.Confidence);
 
                     if (isThirdParty && trackerSignals.Count > 0 && !isMedia)
-                        ProtectionEngine.ObserveCrossSiteAppearance(reqHost, tab.CurrentHost);
+                        ProtectionEngine.ObserveCrossSiteAppearance(reqHost, tab.CurrentHost ?? "");
                 }
 
                 // Enqueue for batched drain (avoids per-request Dispatcher.Invoke)
@@ -2506,6 +2566,7 @@ namespace PrivacyMonitor
             StatTrackers.Text = trackerCount.ToString();
             StatFingerprints.Text = tab.Fingerprints.Count.ToString();
             StatCookies.Text = allTrackingCookies.ToString();
+            UpdateSidebarMiniSparkline(tab);
             // Simple view: one line
             if (SimpleStatsText != null)
             {
@@ -2619,15 +2680,66 @@ namespace PrivacyMonitor
             var setCookieNames = tab.Requests.SelectMany(r => r.ResponseHeaders.Where(h => h.Key.Equals("set-cookie", StringComparison.OrdinalIgnoreCase)))
                 .Select(h => (h.Value ?? "").Split(';')[0].Split('=')[0].Trim()).Where(s => s.Length > 0).Distinct().ToList();
             foreach (var c in tab.Cookies)
-                items.Add(new StorageListItem { Label = "CK", Name = c.Name, Store = "Cookie (JS)", Classification = c.Classification, ClassColor = ClassBrush(c.Classification), Size = c.Value.Length > 0 ? $"{c.Value.Length}ch" : "" });
+            {
+                var owner = string.Equals(c.Domain, tab.CurrentHost, StringComparison.OrdinalIgnoreCase) ? "1P" : "3P";
+                var persistence = "Lifetime: unknown (JS cookie)";
+                var idFlag = IsLikelyIdentifierCookie(c.Name) ? " | Likely ID" : "";
+                items.Add(new StorageListItem
+                {
+                    Label = owner,
+                    Name = c.Name,
+                    Store = "Cookie (JS) | " + persistence + idFlag,
+                    Classification = c.Classification,
+                    ClassColor = ClassBrush(c.Classification),
+                    Size = c.Value.Length > 0 ? $"{c.Value.Length}ch" : ""
+                });
+            }
             foreach (var n in setCookieNames.Where(n => !tab.Cookies.Any(c => c.Name == n)))
-            { var cls = PrivacyEngine.ClassifyCookie(n); items.Add(new StorageListItem { Label = "HC", Name = n, Store = "Cookie (HttpOnly)", Classification = cls, ClassColor = ClassBrush(cls) }); }
+            {
+                var cls = PrivacyEngine.ClassifyCookie(n);
+                var idFlag = IsLikelyIdentifierCookie(n) ? " | Likely ID" : "";
+                items.Add(new StorageListItem { Label = "HC", Name = n, Store = "Cookie (HttpOnly) | Lifetime: likely persistent" + idFlag, Classification = cls, ClassColor = ClassBrush(cls) });
+            }
             foreach (var s in tab.Storage)
                 items.Add(new StorageListItem { Label = s.Store switch { "localStorage" => "LS", "sessionStorage" => "SS", "IndexedDB" => "DB", _ => "--" },
                     Name = s.Key, Store = s.Store, Classification = s.Classification, ClassColor = ClassBrush(s.Classification), Size = s.Size > 0 ? $"{s.Size:N0}ch" : "" });
             int tracking = items.Count(i => i.Classification.Contains("Tracking"));
-            StorageSummaryText.Text = $"{tab.Cookies.Count} cookies   {setCookieNames.Count} set-cookie   {tab.Storage.Count} storage   {tracking} tracking";
+            int firstPartyCookies = tab.Cookies.Count(c => string.Equals(c.Domain, tab.CurrentHost, StringComparison.OrdinalIgnoreCase));
+            int thirdPartyCookies = tab.Cookies.Count - firstPartyCookies;
+            int likelyIdCookies = tab.Cookies.Count(c => IsLikelyIdentifierCookie(c.Name)) + setCookieNames.Count(IsLikelyIdentifierCookie);
+            StorageSummaryText.Text = $"{tab.Cookies.Count} cookies ({firstPartyCookies} first-party / {thirdPartyCookies} third-party)   {setCookieNames.Count} set-cookie   {tab.Storage.Count} storage   {tracking} tracking   {likelyIdCookies} likely IDs";
             StorageList.ItemsSource = items;
+        }
+
+        private static bool IsLikelyIdentifierCookie(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            var n = name.ToLowerInvariant();
+            return n.Contains("id") || n.Contains("uid") || n.Contains("guid") || n.Contains("session") || n.Contains("token") || n.Contains("cid") || n.Contains("_ga") || n.Contains("_gid");
+        }
+
+        private void UpdateSidebarMiniSparkline(BrowserTab tab)
+        {
+            if (LiveRpsMiniText == null) return;
+            var now = DateTime.Now;
+            var buckets = new int[8];
+            foreach (var r in tab.Requests)
+            {
+                var age = (int)(now - r.Time).TotalSeconds;
+                if (age < 0 || age > 39) continue;
+                int idx = 7 - (age / 5);
+                if (idx >= 0 && idx < buckets.Length) buckets[idx]++;
+            }
+            var max = Math.Max(1, buckets.Max());
+            const string bars = "▁▂▃▄▅▆▇█";
+            var sb = new StringBuilder();
+            foreach (var b in buckets)
+            {
+                var bi = (int)Math.Round((bars.Length - 1) * (b / (double)max));
+                bi = Math.Clamp(bi, 0, bars.Length - 1);
+                sb.Append(bars[bi]);
+            }
+            LiveRpsMiniText.Text = "RPS " + sb + $"  now:{buckets[^1]}";
         }
 
         private void RefreshFingerprintList(BrowserTab tab)
@@ -3252,7 +3364,30 @@ namespace PrivacyMonitor
             _interceptorTabId = tab.Id;
             void FlushPaused() => FlushPausedInterceptorRequests();
             service.Resumed += FlushPaused;
-            var win = new NetworkInterceptor.NetworkInterceptorWindow(service, tab.Id)
+            var win = new NetworkInterceptor.NetworkInterceptorWindow(service, tab.Id, tab.CurrentHost, req =>
+            {
+                var site = tab.CurrentHost ?? "";
+                if (string.IsNullOrWhiteSpace(site)) return;
+                var rule = new SiteRule { ScopeHost = site };
+                switch (req.Action)
+                {
+                    case NetworkInterceptor.InterceptorQuickRuleAction.BlockPathContains:
+                        rule.Action = SiteRuleAction.BlockPathContains;
+                        rule.MatchValue = req.Value ?? "";
+                        break;
+                    case NetworkInterceptor.InterceptorQuickRuleAction.ForceHttps:
+                        rule.Action = SiteRuleAction.ForceHttps;
+                        rule.MatchValue = string.IsNullOrWhiteSpace(req.Value) ? site : req.Value;
+                        break;
+                    case NetworkInterceptor.InterceptorQuickRuleAction.RewriteHeader:
+                        rule.Action = SiteRuleAction.RewriteHeader;
+                        rule.HeaderName = req.HeaderName ?? "";
+                        rule.HeaderValue = req.HeaderValue ?? "";
+                        break;
+                }
+                SiteRulesEngine.AddRule(rule);
+                Dispatcher.BeginInvoke(new Action(() => RefreshRulesPanel(tab)));
+            })
             {
                 Owner = this
             };
@@ -3642,6 +3777,172 @@ namespace PrivacyMonitor
                 btn.Foreground = i == idx ? PillActiveFg : PillInactiveFg;
                 btn.FontWeight = i == idx ? FontWeights.SemiBold : FontWeights.Medium;
             }
+        }
+
+        private void SidebarProtectionModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSidebarControlEvents) return;
+            if (SidebarProtectionModeCombo == null || SidebarProtectionModeCombo.SelectedIndex < 0) return;
+            var tab = ActiveTab;
+            if (tab == null || string.IsNullOrEmpty(tab.CurrentHost)) return;
+            ApplyProtectionMode((ProtectionMode)SidebarProtectionModeCombo.SelectedIndex);
+        }
+
+        private void FpStrictnessCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSidebarControlEvents) return;
+            var tab = ActiveTab;
+            if (tab == null || string.IsNullOrEmpty(tab.CurrentHost) || FpStrictnessCombo == null || FpStrictnessCombo.SelectedIndex < 0) return;
+            var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
+            profile.FingerprintStrictness = FpStrictnessCombo.SelectedIndex switch
+            {
+                0 => FingerprintStrictness.Safe,
+                1 => FingerprintStrictness.Balanced,
+                _ => FingerprintStrictness.BreakThings
+            };
+            ProtectionEngine.SetProfile(tab.CurrentHost, profile, GetProfileStore());
+            _ = UpdatePerNavigationScriptsAsync(tab, profile);
+        }
+
+        private void SidebarAntiFpToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_suppressSidebarControlEvents) return;
+            var tab = ActiveTab;
+            if (tab == null || string.IsNullOrEmpty(tab.CurrentHost) || SidebarAntiFpToggle == null) return;
+            var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
+            profile.AntiFingerprint = SidebarAntiFpToggle.IsChecked == true;
+            ProtectionEngine.SetProfile(tab.CurrentHost, profile, GetProfileStore());
+            _ = UpdatePerNavigationScriptsAsync(tab, profile);
+        }
+
+        private void SidebarAdBlockToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_suppressSidebarControlEvents) return;
+            var tab = ActiveTab;
+            if (tab == null || string.IsNullOrEmpty(tab.CurrentHost) || SidebarAdBlockToggle == null) return;
+            var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
+            profile.BlockAdsTrackers = SidebarAdBlockToggle.IsChecked == true;
+            ProtectionEngine.SetProfile(tab.CurrentHost, profile, GetProfileStore());
+            _ = ApplyRuntimeBlockerAsync(tab, profile);
+            _ = UpdatePerNavigationScriptsAsync(tab, profile);
+        }
+
+        private void SidebarBehavioralToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_suppressSidebarControlEvents) return;
+            var tab = ActiveTab;
+            if (tab == null || string.IsNullOrEmpty(tab.CurrentHost) || SidebarBehavioralToggle == null) return;
+            var profile = ProtectionEngine.GetProfile(tab.CurrentHost, GetProfileStore());
+            profile.BlockBehavioral = SidebarBehavioralToggle.IsChecked == true;
+            ProtectionEngine.SetProfile(tab.CurrentHost, profile, GetProfileStore());
+        }
+
+        private void RefreshRulesPanel(BrowserTab tab)
+        {
+            if (RulesListBox == null || string.IsNullOrEmpty(tab.CurrentHost)) return;
+            var rules = SiteRulesEngine.GetRules(tab.CurrentHost)
+                .Select(r =>
+                {
+                    var action = r.Action switch
+                    {
+                        SiteRuleAction.BlockDomain => "Block domain: " + r.MatchValue,
+                        SiteRuleAction.BlockPathContains => "Block path token: " + r.MatchValue,
+                        SiteRuleAction.ForceHttps => "Force HTTPS: " + (string.IsNullOrEmpty(r.MatchValue) ? "(site default)" : r.MatchValue),
+                        SiteRuleAction.RewriteHeader => "Rewrite header: " + r.HeaderName + " = " + r.HeaderValue,
+                        _ => r.Action.ToString()
+                    };
+                    return new RuleListEntry { Id = r.Id, Display = action };
+                })
+                .ToList();
+            RulesListBox.ItemsSource = rules;
+        }
+
+        private void RulesBlockCurrentDomain_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            if (tab == null || string.IsNullOrEmpty(tab.CurrentHost)) return;
+            SiteRulesEngine.AddRule(new SiteRule
+            {
+                ScopeHost = tab.CurrentHost,
+                Action = SiteRuleAction.BlockDomain,
+                MatchValue = tab.CurrentHost
+            });
+            RefreshRulesPanel(tab);
+        }
+
+        private void RulesForceHttps_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            if (tab == null || string.IsNullOrEmpty(tab.CurrentHost)) return;
+            SiteRulesEngine.AddRule(new SiteRule
+            {
+                ScopeHost = tab.CurrentHost,
+                Action = SiteRuleAction.ForceHttps,
+                MatchValue = tab.CurrentHost
+            });
+            RefreshRulesPanel(tab);
+        }
+
+        private void RulesStripReferer_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            if (tab == null || string.IsNullOrEmpty(tab.CurrentHost)) return;
+            SiteRulesEngine.AddRule(new SiteRule
+            {
+                ScopeHost = tab.CurrentHost,
+                Action = SiteRuleAction.RewriteHeader,
+                HeaderName = "Referer",
+                HeaderValue = ""
+            });
+            RefreshRulesPanel(tab);
+        }
+
+        private void RulesAddPathToken_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            var token = RulesPathTokenBox?.Text?.Trim() ?? "";
+            if (tab == null || string.IsNullOrEmpty(tab.CurrentHost) || string.IsNullOrWhiteSpace(token)) return;
+            SiteRulesEngine.AddRule(new SiteRule
+            {
+                ScopeHost = tab.CurrentHost,
+                Action = SiteRuleAction.BlockPathContains,
+                MatchValue = token
+            });
+            if (RulesPathTokenBox != null) RulesPathTokenBox.Text = "";
+            RefreshRulesPanel(tab);
+        }
+
+        private void RulesAddHeaderRewrite_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            var hn = RulesHeaderNameBox?.Text?.Trim() ?? "";
+            var hv = RulesHeaderValueBox?.Text ?? "";
+            if (tab == null || string.IsNullOrEmpty(tab.CurrentHost) || string.IsNullOrWhiteSpace(hn)) return;
+            SiteRulesEngine.AddRule(new SiteRule
+            {
+                ScopeHost = tab.CurrentHost,
+                Action = SiteRuleAction.RewriteHeader,
+                HeaderName = hn,
+                HeaderValue = hv
+            });
+            if (RulesHeaderNameBox != null) RulesHeaderNameBox.Text = "";
+            if (RulesHeaderValueBox != null) RulesHeaderValueBox.Text = "";
+            RefreshRulesPanel(tab);
+        }
+
+        private void RulesRemoveSelected_Click(object sender, RoutedEventArgs e)
+        {
+            var tab = ActiveTab;
+            if (tab == null || string.IsNullOrEmpty(tab.CurrentHost) || RulesListBox?.SelectedItem is not RuleListEntry selected) return;
+            SiteRulesEngine.RemoveRule(tab.CurrentHost, selected.Id);
+            RefreshRulesPanel(tab);
+        }
+
+        private sealed class RuleListEntry
+        {
+            public string Id { get; set; } = "";
+            public string Display { get; set; } = "";
+            public override string ToString() => Display;
         }
 
         private async void ClearSiteData_Click(object sender, RoutedEventArgs e)

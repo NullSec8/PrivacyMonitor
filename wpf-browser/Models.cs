@@ -16,10 +16,18 @@ namespace PrivacyMonitor
         Aggressive      // Block known + heuristic + suspected trackers
     }
 
+    public enum FingerprintStrictness
+    {
+        Safe,           // Compatibility-first spoofing
+        Balanced,       // Default privacy/compatibility balance
+        BreakThings     // Maximum spoofing; may break sites
+    }
+
     public class SiteProfile
     {
         public ProtectionMode Mode { get; set; } = ProtectionMode.BlockKnown;
         public bool AntiFingerprint { get; set; } = true;
+        public FingerprintStrictness FingerprintStrictness { get; set; } = FingerprintStrictness.Balanced;
         public bool BlockBehavioral { get; set; } = true;
         public bool BlockAdsTrackers { get; set; } = true;
         public DateTime LastVisit { get; set; } = DateTime.UtcNow;

@@ -129,9 +129,85 @@
     // ── Various ──
     window._pp = noop;
     window.Intercom = noop;
-    window.Intercom.booted = true;
+    try { window.Intercom.booted = true; } catch(e) {}
     window._satellite = { track: noop, getVar: noop, setVar: noop, pageBottom: noop };
     window.s_gi = noop;
+
+    // ── Lotame ──
+    window.lotame_sync = noop;
+    window.LOTCC = { cmd: [], ready: noop, collect: noop };
+
+    // ── Permutive ──
+    window.permutive = { track: noop, identify: noop, trigger: noop, addon: noop, consent: noop, ready: noop };
+
+    // ── Chartbeat ──
+    window._sf_async_config = {};
+    window.pSUPERFLY = { virtualPage: noop, activity: noop };
+
+    // ── Parsely ──
+    window.PARSELY = { autotrack: false, conversions: { trackPixel: noop } };
+
+    // ── ComScore ──
+    window._comscore = []; window._comscore.push = noop;
+    window.COMSCORE = { beacon: noop };
+
+    // ── IndexExchange ──
+    window.headertag = { cmd: [], apiReady: true };
+
+    // ── Moat ──
+    window.moatYieldReady = true;
+    window.moat = { record: noop, startTracking: noop };
+
+    // ── IAS (Integral Ad Science) ──
+    window.__iasPET = { queue: [], setTargetingForGPT: noop };
+
+    // ── Prebid.js ──
+    window.pbjs = window.pbjs || { que: [], cmd: [] };
+    window.pbjs.que.push = noop;
+    window.pbjs.cmd.push = noop;
+
+    // ── SpotX ──
+    window.spotx = { directAdOS: noop };
+
+    // ── Snowplow ──
+    window.snowplow = noop;
+
+    // ── Bugsnag ──
+    window.bugsnagClient = { notify: noop, use: noop, startSession: noop };
+
+    // ── Drift ──
+    window.drift = { api: { sidebar: { toggle: noop } }, on: noop, off: noop, track: noop, identify: noop, reset: noop };
+
+    // ── Freshchat ──
+    window.fcWidget = { init: noop, open: noop, close: noop, track: noop, identify: noop };
+
+    // ── Mouseflow ──
+    window._mfq = []; window._mfq.push = noop;
+
+    // ── Lucky Orange ──
+    window.__lo_cs_added = true;
+    window.__lo_site_id = 0;
+
+    // ── Adroll ──
+    window.adroll = noop;
+    window.__adroll_loaded = true;
+    window.adroll_adv_id = '';
+    window.adroll_pix_id = '';
+
+    // ── Perfect Audience ──
+    window._pa = { track: noop };
+
+    // ── Block document.write ad injection ──
+    var _docWrite = document.write.bind(document);
+    document.write = function(s) {
+      try {
+        var lower = (s || '').toLowerCase();
+        if (lower.indexOf('ad') !== -1 && (lower.indexOf('script') !== -1 || lower.indexOf('iframe') !== -1)) return;
+        if (lower.indexOf('doubleclick') !== -1 || lower.indexOf('googlesyndication') !== -1) return;
+        if (lower.indexOf('pagead') !== -1 || lower.indexOf('adservice') !== -1) return;
+      } catch(e) {}
+      return _docWrite(s);
+    };
 
     // ── navigator.sendBeacon: Block known tracking endpoints ──
     if (navigator.sendBeacon) {
@@ -164,7 +240,14 @@
         'api.segment.io', 'cdn.segment.com',
         'heapanalytics.com', 'rs.fullstory.com',
         'hotjar.com', 'static.hotjar.com',
-        'script.hotjar.com', 'in.hotjar.com'
+        'script.hotjar.com', 'in.hotjar.com',
+        'mouseflow.com', 'luckyorange.com', 'freshchat.com',
+        'drift.com', 'chartbeat.com', 'parsely.com', 'b.scorecardresearch.com',
+        'pixel.quantserve.com', 'c.amazon-adsystem.com', 'aax.amazon-adsystem.com',
+        'sb.scorecardresearch.com', 'secure.quantserve.com', 'cdn.taboola.com',
+        'trc.taboola.com', 'widgets.outbrain.com', 'log.outbrain.com',
+        'ib.adnxs.com', 'secure.adnxs.com', 'pixel.facebook.com',
+        'ct.pinterest.com', 'analytics.tiktok.com', 'an.facebook.com'
       ];
       window.fetch = function(input, init) {
         try {
@@ -184,10 +267,13 @@
     XMLHttpRequest.prototype.open = function(method, url) {
       try {
         var u = (url || '').toLowerCase();
-        if (u.indexOf('google-analytics.com') >= 0 || u.indexOf('/r/collect') >= 0 ||
-            u.indexOf('facebook.com/tr') >= 0 || u.indexOf('bat.bing.com') >= 0 ||
-            u.indexOf('clarity.ms') >= 0 || u.indexOf('hotjar.com') >= 0 ||
-            u.indexOf('sentry') >= 0) {
+        var xhrBlock = ['google-analytics.com', '/r/collect', 'facebook.com/tr', 'bat.bing.com',
+          'clarity.ms', 'hotjar.com', 'sentry', 'mouseflow.com', 'luckyorange.com',
+          'chartbeat.com', 'parsely.com', 'scorecardresearch.com', 'taboola.com',
+          'outbrain.com', 'adnxs.com', 'tiktok.com/i18n', 'analytics.tiktok.com'];
+        var blocked = false;
+        for (var k = 0; k < xhrBlock.length; k++) { if (u.indexOf(xhrBlock[k]) >= 0) { blocked = true; break; } }
+        if (blocked) {
           this.__pmBlocked = true;
           return;
         }

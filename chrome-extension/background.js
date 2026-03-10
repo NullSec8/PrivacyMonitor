@@ -144,8 +144,8 @@ chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
       var mode = await getMode();
       var blockList = getDomainsForMode(mode);
       var tabId = msg.tabId;
-      if (!tabId || mode === 'off' || !blockList.length) {
-        sendResponse({ blocked: [], count: 0, mode: mode });
+      if (!tabId) {
+        sendResponse({ blocked: [], count: 0, mode: mode, extra: { scripts: 0, iframes: 0 } });
         return;
       }
       try {
@@ -154,17 +154,25 @@ chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
           func: function() {
             var out = [];
             var add = function(url) { if (url && url.startsWith('http')) out.push(url); };
-            document.querySelectorAll('script[src]').forEach(function(s) { add(s.src); });
+            var scripts = document.querySelectorAll('script[src]');
+            scripts.forEach(function(s) { add(s.src); });
+            var iframes = document.querySelectorAll('iframe[src]');
+            iframes.forEach(function(s) { add(s.src); });
             document.querySelectorAll('img[src]').forEach(function(s) { add(s.src); });
-            document.querySelectorAll('iframe[src]').forEach(function(s) { add(s.src); });
             document.querySelectorAll('link[href]').forEach(function(l) {
               var h = l.getAttribute('href');
               if (h && (l.rel === 'stylesheet' || l.rel === 'preload' || l.rel === 'script')) add(h);
             });
-            return out;
+            return { urls: out, scripts: scripts.length, iframes: iframes.length };
           }
         });
-        var urls = (results && results[0] && results[0].result) ? results[0].result : [];
+        var data = (results && results[0] && results[0].result) ? results[0].result : { urls: [], scripts: 0, iframes: 0 };
+        var urls = data.urls || [];
+        var extra = { scripts: data.scripts || 0, iframes: data.iframes || 0 };
+        if (mode === 'off' || !blockList.length) {
+          sendResponse({ blocked: [], count: 0, mode: mode, extra: extra });
+          return;
+        }
         var blocked = [];
         var seen = new Set();
         for (var i = 0; i < urls.length; i++) {
@@ -177,9 +185,9 @@ chrome.runtime.onMessage.addListener(function(msg, _sender, sendResponse) {
             }
           } catch (_) {}
         }
-        sendResponse({ blocked: blocked, count: blocked.length, mode: mode });
+        sendResponse({ blocked: blocked, count: blocked.length, mode: mode, extra: extra });
       } catch (e) {
-        sendResponse({ blocked: [], count: 0, mode: mode, error: e.message });
+        sendResponse({ blocked: [], count: 0, mode: mode, error: e.message, extra: { scripts: -1, iframes: -1 } });
       }
     })();
     return true;

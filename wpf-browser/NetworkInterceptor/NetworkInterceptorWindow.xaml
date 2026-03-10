@@ -150,9 +150,12 @@
                             ToolTip="Open ReplayModify for each selected; send only when you click Replay in each dialog."/>
                     <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Foreground="#A6ADC8" FontSize="11" Margin="0,0,8,0"
                                ToolTip="{Binding PausedStatusText}"/>
-                    <Button Content="Export session" Command="{Binding ExportSessionCommand}" Padding="8,4" FontSize="11" Margin="0,0,4,0"/>
-                    <Button Content="Export (streaming)" Command="{Binding ExportSessionStreamingCommand}" Padding="8,4" FontSize="11" Margin="0,0,4,0"
-                            ToolTip="Streaming NDJSON with progress; use gzip for large sessions (see menu)."/>
+                    <Button Content="Export JSON" Command="{Binding ExportSessionCommand}" Padding="8,4" FontSize="11" Margin="0,0,4,0"
+                            ToolTip="Export full session as Privacy Monitor JSON format"/>
+                    <Button Content="Export HAR" Command="{Binding ExportHarCommand}" Padding="8,4" FontSize="11" Margin="0,0,4,0"
+                            ToolTip="Export as HAR 1.2 (compatible with Burp Suite, Chrome DevTools, OWASP ZAP)" FontWeight="SemiBold"/>
+                    <Button Content="Stream NDJSON" Command="{Binding ExportSessionStreamingCommand}" Padding="8,4" FontSize="11" Margin="0,0,4,0"
+                            ToolTip="Streaming NDJSON with progress; use gzip for large sessions."/>
                     <CheckBox Content="Gzip" IsChecked="{Binding ExportWithGzip}" Foreground="#A6ADC8" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0"
                              ToolTip="Compress streaming export (NDJSON.gz)."/>
                 </StackPanel>
@@ -269,7 +272,21 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Text="Requests" Foreground="#CDD6F4" FontWeight="SemiBold" FontSize="13" Margin="12,10,0,8"/>
+                    <DockPanel Grid.Row="0" Margin="12,8,12,6">
+                        <TextBlock DockPanel.Dock="Left" Text="Requests" Foreground="#CDD6F4" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
+                        <Border DockPanel.Dock="Right" CornerRadius="12" Background="#313244" Padding="10,0" Height="28" Margin="12,0,0,0">
+                            <TextBox x:Name="InterceptorSearchBox" VerticalContentAlignment="Center" FontSize="11"
+                                     BorderThickness="0" Background="Transparent" Foreground="#CDD6F4" FontFamily="Consolas"
+                                     TextChanged="InterceptorSearch_Changed"
+                                     ToolTip="Filter by URL, domain, method, or type (e.g. 'google', 'POST', 'tracker')">
+                                <TextBox.Style>
+                                    <Style TargetType="TextBox">
+                                        <Setter Property="Tag" Value="Search requests…"/>
+                                    </Style>
+                                </TextBox.Style>
+                            </TextBox>
+                        </Border>
+                    </DockPanel>
                     <DataGrid x:Name="RequestGrid" Grid.Row="1" ItemsSource="{Binding Requests}"
                               SelectedItem="{Binding SelectedRequest, Mode=TwoWay}"
                               AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
@@ -376,10 +393,13 @@
                                 <MenuItem Header="Batch replay selected with modification…" Command="{Binding ReplaySelectedWithModifyCommand}" CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}" ToolTip="ReplayModify for each selected; send only when you click Replay."/>
                                 <Separator/>
                                 <MenuItem Header="Block this domain" Command="{Binding BlockDomainCommand}"/>
+                                <MenuItem Header="Add rule: Block path token" Command="{Binding AddBlockPathRuleCommand}"/>
+                                <MenuItem Header="Add rule: Force HTTPS" Command="{Binding AddForceHttpsRuleCommand}"/>
+                                <MenuItem Header="Add rule: Strip Referer header" Command="{Binding AddStripRefererRuleCommand}"/>
                                 <MenuItem Header="Export selected (JSON)" Command="{Binding ExportRequestCommand}"/>
-                                <MenuItem Header="Export full session" Command="{Binding ExportSessionCommand}"/>
-                                <MenuItem Header="Export full session (streaming)" Command="{Binding ExportSessionChunkedCommand}" ToolTip="For large sessions; writes NDJSON to avoid memory spike."/>
-                                <MenuItem Header="Export full session (streaming + progress)" Command="{Binding ExportSessionStreamingCommand}" ToolTip="NDJSON with progress bar; enable Gzip in toolbar for compression."/>
+                                <MenuItem Header="Export full session (JSON)" Command="{Binding ExportSessionCommand}"/>
+                                <MenuItem Header="Export session (HAR 1.2)" Command="{Binding ExportHarCommand}" FontWeight="SemiBold"/>
+                                <MenuItem Header="Export streaming (NDJSON)" Command="{Binding ExportSessionChunkedCommand}" ToolTip="For large sessions; writes NDJSON to avoid memory spike."/>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                     </DataGrid>
@@ -429,6 +449,38 @@
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <TextBox x:Name="PrivacyAnalysisText" IsReadOnly="True" TextWrapping="Wrap"
                                          FontFamily="Segoe UI" FontSize="12" Background="#1E1E2E" Foreground="#CDD6F4" BorderThickness="0" Padding="8"/>
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Timeline">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <DockPanel Margin="0,0,0,8">
+                                    <TextBlock DockPanel.Dock="Left" Text="Filter:" Foreground="#A6ADC8" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="TimelineFilterCombo" Width="190" SelectionChanged="TimelineFilterCombo_SelectionChanged" SelectedIndex="0">
+                                        <ComboBoxItem Content="All traffic"/>
+                                        <ComboBoxItem Content="Cross-site POST only"/>
+                                        <ComboBoxItem Content="High/Critical risk only"/>
+                                        <ComboBoxItem Content="Trackers only"/>
+                                    </ComboBox>
+                                </DockPanel>
+                                <TextBox Grid.Row="1" x:Name="TimelineText" IsReadOnly="True" TextWrapping="NoWrap"
+                                         FontFamily="Consolas" FontSize="10" Background="#1E1E2E" Foreground="#CDD6F4" BorderThickness="0" Padding="8"
+                                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
+                            </Grid>
+                        </TabItem>
+                        <TabItem Header="Raw HTTP">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                                <TextBox x:Name="RawHttpText" IsReadOnly="True" TextWrapping="NoWrap"
+                                         FontFamily="Consolas" FontSize="11" Background="#1E1E2E" Foreground="#A6E3A1" BorderThickness="0" Padding="8"/>
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Hex View">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                                <TextBox x:Name="HexViewText" IsReadOnly="True" TextWrapping="NoWrap"
+                                         FontFamily="Consolas" FontSize="10" Background="#0D0D14" Foreground="#89B4FA" BorderThickness="0" Padding="8"/>
                             </ScrollViewer>
                         </TabItem>
                     </TabControl>

@@ -892,10 +892,16 @@ namespace PrivacyMonitor
         public const string BlendInUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
         /// <summary>
-        /// Blend-in anti-fingerprinting: Chrome-on-Windows profile. Uses real Chrome replay when artifacts are loaded; otherwise pass-through for canvas/WebGL.
-        /// See docs/FINGERPRINT_REPLAY_ARCHITECTURE.md.
+        /// Blend-in anti-fingerprinting default script.
         /// </summary>
-        public static string AntiFingerPrintScript => GetAntiFingerPrintScript(LoadFingerprintArtifacts());
+        public static string AntiFingerPrintScript => GetAntiFingerPrintScript(FingerprintStrictness.Balanced, null);
+
+        public static string GetAntiFingerPrintScript(FingerprintStrictness strictness, string? siteHost)
+        {
+            var baseScript = GetAntiFingerPrintScript(LoadFingerprintArtifacts());
+            var overlay = BuildStrictnessOverlayScript(strictness, siteHost);
+            return string.IsNullOrEmpty(overlay) ? baseScript : baseScript + "\n" + overlay;
+        }
 
         private static readonly string FingerprintArtifactsPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -1138,6 +1144,41 @@ namespace PrivacyMonitor
             return script.Replace("__PM_ARTIFACTS_JSON__", artifactsJs);
         }
 
+        private static string BuildStrictnessOverlayScript(FingerprintStrictness strictness, string? siteHost)
+        {
+            if (strictness == FingerprintStrictness.Balanced)
+                return "";
+
+            var safeHost = string.IsNullOrWhiteSpace(siteHost) ? "default" : siteHost.Trim().ToLowerInvariant();
+            var seed = Math.Abs(safeHost.GetHashCode()) % 97;
+            var safeSeed = seed.ToString();
+
+            if (strictness == FingerprintStrictness.Safe)
+            {
+                return "(function(){try{Object.defineProperty(Navigator.prototype,'deviceMemory',{get:()=>8,configurable:true});Object.defineProperty(Navigator.prototype,'hardwareConcurrency',{get:()=>8,configurable:true});}catch(e){}})();";
+            }
+
+            return $@"
+(function(){{
+    try {{
+        const __pmSeed = {safeSeed};
+        Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {{ get: () => 4 + (__pmSeed % 4), configurable: true }});
+        Object.defineProperty(Navigator.prototype, 'deviceMemory', {{ get: () => 4 + (__pmSeed % 8), configurable: true }});
+        Object.defineProperty(Navigator.prototype, 'languages', {{ get: () => ['en-US','en'], configurable: true }});
+        Object.defineProperty(Screen.prototype, 'width', {{ get: () => 1366 + (__pmSeed % 3) * 80, configurable: true }});
+        Object.defineProperty(Screen.prototype, 'height', {{ get: () => 768 + (__pmSeed % 3) * 64, configurable: true }});
+        Object.defineProperty(window, 'devicePixelRatio', {{ get: () => 1 + (__pmSeed % 2), configurable: true }});
+        const _tz = Intl.DateTimeFormat.prototype.resolvedOptions;
+        Intl.DateTimeFormat.prototype.resolvedOptions = function() {{
+            const o = _tz.apply(this, arguments);
+            o.timeZone = (__pmSeed % 2 === 0) ? 'America/New_York' : 'Europe/Berlin';
+            o.locale = 'en-US';
+            return o;
+        }};
+    }} catch(e) {{}}
+}})();";
+        }
+
         /// <summary>Injects navigator.globalPrivacyControl = true and signals GPC via DOM API.</summary>
         public const string GpcSignalScript = @"
 (function() {
@@ -1356,6 +1397,7 @@ namespace PrivacyMonitor
                 {
                     Mode = (int)kv.Value.Mode,
                     AntiFingerprint = kv.Value.AntiFingerprint,
+                    FingerprintStrictness = kv.Value.FingerprintStrictness,
                     BlockBehavioral = kv.Value.BlockBehavioral,
                     BlockAdsTrackers = kv.Value.BlockAdsTrackers,
                     LastVisit = kv.Value.LastVisit.ToString("o")
@@ -1379,6 +1421,7 @@ namespace PrivacyMonitor
                     {
                         Mode = (ProtectionMode)kv.Value.Mode,
                         AntiFingerprint = kv.Value.AntiFingerprint,
+                        FingerprintStrictness = kv.Value.FingerprintStrictness,
                         BlockBehavioral = kv.Value.BlockBehavioral,
                         BlockAdsTrackers = kv.Value.BlockAdsTrackers,
                         LastVisit = DateTime.TryParse(kv.Value.LastVisit, out var dt) ? dt : DateTime.UtcNow
@@ -1589,6 +1632,7 @@ namespace PrivacyMonitor
         {
             public int Mode { get; set; }
             public bool AntiFingerprint { get; set; }
+            public FingerprintStrictness FingerprintStrictness { get; set; } = FingerprintStrictness.Balanced;
             public bool BlockBehavioral { get; set; }
             public bool BlockAdsTrackers { get; set; } = true;
             public string LastVisit { get; set; } = "";

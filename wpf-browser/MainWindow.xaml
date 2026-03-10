@@ -595,6 +595,7 @@
                             <Button x:Name="ATab4" Style="{StaticResource APill}" Content="Security" Click="ATab_Click" Tag="4"/>
                             <Button x:Name="ATab5" Style="{StaticResource APill}" Content="Report" Click="ATab_Click" Tag="5"/>
                             <Button x:Name="ATab6" Style="{StaticResource APill}" Content="Forensics" Click="ATab_Click" Tag="6"/>
+                            <Button x:Name="ATab7" Style="{StaticResource APill}" Content="Rules" Click="ATab_Click" Tag="7"/>
                         </WrapPanel>
                     </Border>
 
@@ -1041,6 +1042,39 @@
                                 </ItemsControl>
 
                                 </StackPanel><!-- end ForensicExpertPanel -->
+                            </StackPanel>
+
+                            <!-- RULES -->
+                            <StackPanel x:Name="Panel7" Visibility="Collapsed">
+                                <TextBlock Text="Per-site rules (mini uBlock/Burp)" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondary}" Margin="2,0,0,6" FontFamily="Segoe UI"/>
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Text="Quick rules" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6" FontFamily="Segoe UI"/>
+                                        <WrapPanel>
+                                            <Button Style="{StaticResource SecBtn}" Content="Block this page domain" Click="RulesBlockCurrentDomain_Click" Margin="0,0,8,6"/>
+                                            <Button Style="{StaticResource SecBtn}" Content="Force HTTPS" Click="RulesForceHttps_Click" Margin="0,0,8,6"/>
+                                            <Button Style="{StaticResource SecBtn}" Content="Strip Referer" Click="RulesStripReferer_Click" Margin="0,0,0,6"/>
+                                        </WrapPanel>
+                                        <TextBlock Text="Block path contains" FontSize="10" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,4"/>
+                                        <DockPanel>
+                                            <TextBox x:Name="RulesPathTokenBox" Height="30" Margin="0,0,8,0" VerticalContentAlignment="Center"/>
+                                            <Button Content="Add" Click="RulesAddPathToken_Click" Padding="12,0"/>
+                                        </DockPanel>
+                                        <TextBlock Text="Rewrite header" FontSize="10" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,4"/>
+                                        <DockPanel>
+                                            <TextBox x:Name="RulesHeaderNameBox" Width="150" Height="30" Margin="0,0,8,0" VerticalContentAlignment="Center"/>
+                                            <TextBox x:Name="RulesHeaderValueBox" Height="30" Margin="0,0,8,0" VerticalContentAlignment="Center"/>
+                                            <Button Content="Add" Click="RulesAddHeaderRewrite_Click" Padding="12,0"/>
+                                        </DockPanel>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Text="Active rules for this site" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6" FontFamily="Segoe UI"/>
+                                        <ListBox x:Name="RulesListBox" MaxHeight="300" BorderThickness="0" Background="Transparent"/>
+                                        <Button Style="{StaticResource SecBtn}" Content="Remove selected rule" Click="RulesRemoveSelected_Click" Margin="0,8,0,0"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
 
                         </Grid>
