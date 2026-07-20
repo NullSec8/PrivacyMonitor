@@ -88,25 +88,25 @@ SSH in, then:
 
 ```bash
 # Recent download events (last 20 lines)
-tail -20 /home/endri/browser_project/logs/download-log.jsonl
+tail -20 /home/END_USER/browser_project/logs/download-log.jsonl
 
 # Recent install/update events
-tail -20 /home/endri/browser_project/logs/install-log.jsonl
+tail -20 /home/END_USER/browser_project/logs/install-log.jsonl
 
 # Pretty-print last download (Linux)
-tail -1 /home/endri/browser_project/logs/download-log.jsonl | python3 -m json.tool
+tail -1 /home/END_USER/browser_project/logs/download-log.jsonl | python3 -m json.tool
 
 # Watch new entries in real time
-tail -f /home/endri/browser_project/logs/download-log.jsonl
+tail -f /home/END_USER/browser_project/logs/download-log.jsonl
 
 # Recent usage (anonymous stats)
-tail -20 /home/endri/browser_project/logs/usage-log.jsonl
+tail -20 /home/END_USER/browser_project/logs/usage-log.jsonl
 ```
 
 From your Windows machine (with SSH key set up):
 
 ```powershell
-ssh root@187.77.71.151 "tail -30 /home/endri/browser_project/logs/download-log.jsonl"
+ssh END_USER@YOUR_SERVER_IP "tail -30 /home/END_USER/browser_project/logs/download-log.jsonl"
 ```
 
 ---

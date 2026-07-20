@@ -18,7 +18,7 @@ namespace PrivacyMonitor;
 public static class UpdateService
 {
     private static string? _baseUrl;
-    private const string DefaultUrl = "http://187.77.71.151:3000";
+    private const string DefaultUrl = "http://localhost:3000";
     private const string ConfigDirName = "PrivacyMonitor";
     private const string UpdateServerFilename = "update-server.txt";
     private static readonly HttpClient HttpClient = new()

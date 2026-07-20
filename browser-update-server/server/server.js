@@ -8,7 +8,7 @@
  */
 
 const path = require('path');
-// Load env.default first (override any systemd env), then .env so VPS can override
+// Load env.default first (override any systemd env), then .env so server can override
 require('dotenv').config({ path: path.join(__dirname, 'env.default'), override: true });
 require('dotenv').config({ override: true });
 

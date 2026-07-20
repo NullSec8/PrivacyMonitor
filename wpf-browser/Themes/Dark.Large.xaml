@@ -122,4 +122,11 @@
         <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </Style>
+    <Style x:Key="TextSectionHeader" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+        <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
 </ResourceDictionary>

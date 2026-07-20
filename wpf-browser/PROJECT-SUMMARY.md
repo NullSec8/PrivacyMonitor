@@ -6,7 +6,7 @@
 wpf-browser/
 ├── App.xaml, App.xaml.cs, MainWindow.xaml, ...
 ├── PrivacyEngine.cs, UpdateService.cs, ...   # WPF app (Privacy Monitor)
-├── website/                                   # Static site (deployed to VPS)
+├── website/                                   # Static site
 │   ├── index.html, features.html, download.html, security.html
 │   ├── admin.html, logs.html, setup-2fa.html
 │   └── assets/ (styles.css, app.js, ...)
@@ -27,7 +27,7 @@ wpf-browser/
 ### 1. WPF app (Privacy Monitor)
 
 - **Privacy-focused browser** – WebView2, privacy score, tracker detection, blocking, reports, forensics.
-- **Updates** – `UpdateService.cs`: `BaseUrl = "http://187.77.71.151"`; calls `/api/latest`, `/api/download`, optional `/api/install-log` and `/api/usage`.
+- **Updates** – `UpdateService.cs`: configurable update server URL; calls `/api/latest`, `/api/download`, optional `/api/install-log` and `/api/usage`.
 - **Publish** – `publish.ps1` builds single-file EXE and ZIP; `sign.ps1` and SIGNING.md for code signing.
 
 ### 2. Website (in `website/`)
@@ -55,18 +55,17 @@ wpf-browser/
 
 ---
 
-## VPS (187.77.71.151)
+## Update server
 
 | What           | Where / How |
 |----------------|-------------|
-| Project root  | `/home/endri/browser_project/` |
+| Project root  | Configured via `%LocalAppData%\PrivacyMonitor\update-server.txt` |
 | Website       | `website/` (HTML, assets) |
 | Node server   | `server/` – systemd unit `browser-update-server` |
 | Builds        | `builds/` (version.json, zip) |
 | Logs          | `logs/` (download-log.jsonl, install-log.jsonl, usage-log.jsonl) |
 | Admin data    | `data/` (2FA secret, etc.) |
 | Nginx         | Proxies 80 → 127.0.0.1:3000 (and optionally `/app/` → 8080) |
-| SSH           | `endri@187.77.71.151` |
 
 ---
 
@@ -74,11 +73,11 @@ wpf-browser/
 
 | Item              | URL / Command |
 |-------------------|---------------|
-| Live site         | http://187.77.71.151 |
-| Download          | http://187.77.71.151/download.html |
-| Admin login       | http://187.77.71.151/admin |
-| Logs (after login)| http://187.77.71.151/logs.html |
-| Restart Node      | `ssh endri@187.77.71.151 "sudo systemctl restart browser-update-server"` |
+| Live site         | http://localhost:3000 |
+| Download          | http://localhost:3000/download.html |
+| Admin login       | http://localhost:3000/admin |
+| Logs (after login)| http://localhost:3000/logs.html |
+| Restart Node      | `sudo systemctl restart browser-update-server` |
 
 ---
 
@@ -101,7 +100,7 @@ wpf-browser/
 
 ### App & releases
 
-- [ ] **Version bump** – Update assembly version and `builds/version.json`; run `publish.ps1`; upload build to VPS.
+- [ ] **Version bump** – Update assembly version and `builds/version.json`; run `publish.ps1`; upload build to server.
 - [ ] **Code signing** – Use `sign.ps1` / SIGNING.md for the EXE.
 - [ ] **Configurable BaseUrl** – Override update server URL (e.g. config or first-run) for HTTPS without recompile.
 

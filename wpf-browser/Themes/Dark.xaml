@@ -2,17 +2,17 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
     <!-- Default compact dark theme -->
-    <sys:Double x:Key="NavButtonSize">32</sys:Double>
-    <sys:Double x:Key="AddressBarHeight">38</sys:Double>
-    <sys:Double x:Key="AddressBarFontSize">13</sys:Double>
-    <sys:Double x:Key="ProtectionPillHeight">28</sys:Double>
-    <sys:Double x:Key="ProtectionPillMinWidth">88</sys:Double>
-    <sys:Double x:Key="ProtectionPillFontSize">11</sys:Double>
-    <sys:Double x:Key="ShieldBadgeSize">22</sys:Double>
-    <GridLength x:Key="SidebarWidth">460</GridLength>
-    <sys:Double x:Key="StatusBarFontSize">11</sys:Double>
-    <sys:Double x:Key="APillHeight">32</sys:Double>
-    <sys:Double x:Key="APillFontSize">12</sys:Double>
+    <sys:Double x:Key="NavButtonSize">40</sys:Double>
+    <sys:Double x:Key="AddressBarHeight">44</sys:Double>
+    <sys:Double x:Key="AddressBarFontSize">14</sys:Double>
+    <sys:Double x:Key="ProtectionPillHeight">36</sys:Double>
+    <sys:Double x:Key="ProtectionPillMinWidth">96</sys:Double>
+    <sys:Double x:Key="ProtectionPillFontSize">12</sys:Double>
+    <sys:Double x:Key="ShieldBadgeSize">28</sys:Double>
+    <GridLength x:Key="SidebarWidth">480</GridLength>
+    <sys:Double x:Key="StatusBarFontSize">12</sys:Double>
+    <sys:Double x:Key="APillHeight">38</sys:Double>
+    <sys:Double x:Key="APillFontSize">13</sys:Double>
 
     <SolidColorBrush x:Key="WindowBackground" Color="#202124"/>
     <SolidColorBrush x:Key="TabBarBackground" Color="#292A2D"/>
@@ -73,51 +73,60 @@
 
     <Style x:Key="TextDisplay" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
-        <Setter Property="FontSize" Value="24"/>
+        <Setter Property="FontSize" Value="28"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </Style>
     <Style x:Key="TextTitle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
-        <Setter Property="FontSize" Value="18"/>
+        <Setter Property="FontSize" Value="20"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </Style>
     <Style x:Key="TextSubtitle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
-        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontSize" Value="16"/>
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </Style>
     <Style x:Key="TextBody" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="14"/>
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="LineHeight" Value="20"/>
     </Style>
     <Style x:Key="TextBodyMuted" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
-        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontSize" Value="14"/>
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="LineHeight" Value="20"/>
     </Style>
     <Style x:Key="TextLabel" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="12"/>
         <Setter Property="FontWeight" Value="Medium"/>
         <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </Style>
     <Style x:Key="TextCaption" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="12"/>
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style x:Key="TextSectionHeader" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+        <Setter Property="Margin" Value="0,0,0,8"/>
     </Style>
 </ResourceDictionary>

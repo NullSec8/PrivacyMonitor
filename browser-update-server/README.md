@@ -155,16 +155,15 @@ When you release a new version of the browser:
 1. **Build and zip** the app (e.g. `publish.ps1` produces `PrivacyMonitor-1.0.1-win-x64.zip`).
 2. **Upload the zip** to the server:
    ```powershell
-   scp "path\to\PrivacyMonitor-1.0.1-win-x64.zip" endri@187.77.71.151:/home/endri/browser_project/builds/
+   scp "path\to\PrivacyMonitor-1.0.1-win-x64.zip" END_USER@YOUR_SERVER_IP:/home/END_USER/browser_project/builds/
    ```
-   (Use root@ if you use root, and adjust the path.)
 3. **Update `version.json`** on the server so `/api/latest` and `/api/download` serve the new version:
    ```bash
-   ssh root@187.77.71.151 "cat /home/endri/browser_project/builds/version.json"
+   ssh END_USER@YOUR_SERVER_IP "cat /home/END_USER/browser_project/builds/version.json"
    ```
    Edit it to set `version` to the new number (e.g. `1.0.1`) and `downloads.win64` / `downloads.default` to the new zip filename (e.g. `PrivacyMonitor-1.0.1-win-x64.zip`). You can edit with:
    ```bash
-   ssh root@187.77.71.151 "nano /home/endri/browser_project/builds/version.json"
+   ssh END_USER@YOUR_SERVER_IP "nano /home/END_USER/browser_project/builds/version.json"
    ```
 
 After that, existing users will see "Update available" when they open the menu (or when they click "Check for updates") and can download and restart to get the new version.

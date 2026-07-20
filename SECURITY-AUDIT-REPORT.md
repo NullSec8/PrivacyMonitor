@@ -112,6 +112,6 @@ All `row[c.key]` values are now escaped before being placed in `<td>` elements.
 
 ## Recommendations (Not Implemented)
 
-1. **HTTPS for update server:** `UpdateService` fallback URL is `http://187.77.71.151:3000`. Consider HTTPS in production.
+1. **HTTPS for update server:** `UpdateService` fallback URL is `http://localhost:3000`. Consider HTTPS in production.
 2. **CSP headers:** Add `Content-Security-Policy` to reduce XSS impact if future code regresses.
 3. **Audit logging:** Log admin logins and 2FA changes for security review.

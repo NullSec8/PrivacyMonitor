@@ -34,7 +34,7 @@ This repo includes the **Privacy Monitor** app, the **browser-update-server** (N
 | **Sidebar panels** | Dashboard, Network, Storage, Fingerprint, Security (headers audit), Report (HTML/CSV, screenshot), Forensics (identity stitching, data flow, timeline). |
 | **Network interceptor** | Live request inspection, pause/resume (Burp-style), replay with optional header/body modification, risk scoring, session export. |
 | **Reports** | Timestamped HTML audit (score, GDPR articles, trackers, cookies, security headers, recommendations). CSV export and screenshot. |
-| **Update server** | Node server for in-app updates and optional 2FA; deploy to your VPS with the included script. |
+| **Update server** | Node server for in-app updates and optional 2FA. |
 
 ---
 
@@ -76,12 +76,11 @@ wpf-browser/             # Privacy Monitor (WPF + WebView2)
   MainWindow.xaml(.cs), BrowserTab.cs, PrivacyEngine.cs, ...
   NetworkInterceptor/    # Live interceptor, replay, risk scoring, export
   chrome-extension/      # Optional extension
-  website/               # Generated site (deploy via update-vps.ps1)
-browser-update-server/   # Node update server (deploy to VPS)
+  website/               # Generated site
+browser-update-server/   # Node update server
   server/
   builds/
 update-all.ps1           # Restore packages & build
-update-vps.ps1           # Deploy website/server/builds to VPS
 PROJECT_STRUCTURE.md
 DEPLOYMENT.md
 ```
@@ -105,7 +104,7 @@ DEPLOYMENT.md
 | Document | Description |
 |----------|-------------|
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | Folder layout and organization |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | GitHub (push) and VPS (`update-vps.ps1`) |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | GitHub push instructions |
 | [NetworkInterceptor/ARCHITECTURE.md](wpf-browser/NetworkInterceptor/ARCHITECTURE.md) | Interceptor, replay, pause/resume, export |
 | [SIGNING.md](wpf-browser/SIGNING.md) | Code signing for distribution |
 
@@ -114,7 +113,73 @@ DEPLOYMENT.md
 ## Deployment
 
 - **GitHub:** `git add -A`, `git commit -m "..."`, `git push`. See [DEPLOYMENT.md](DEPLOYMENT.md).
-- **VPS:** Edit `update-vps.ps1` (e.g. `$DeployWebsite`, `$DeployServer`, `$DeployBuilds`), then run `.\update-vps.ps1`. See [DEPLOYMENT.md](DEPLOYMENT.md).
+
+---
+
+## API Reference
+
+The update server provides these endpoints:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/latest` | Returns latest version info (JSON) |
+| GET | `/api/download/:version?platform=win64` | Download build. `version` can be `latest` or e.g. `1.0.0`; `platform` optional (win64, linux64, mac). |
+| POST | `/api/install-log` | Log an install. Body: `{ "version": "1.0.0", "platform": "win64", "clientId": "optional" }` |
+| POST | `/api/usage` | Anonymous usage data (version, OS, protection level) |
+| GET | `/health` | Health check |
+| POST | `/api/login` | Admin login (username/password) |
+| POST | `/api/logout` | Admin logout |
+| GET | `/api/logs` | Admin only: view logs (requires session) |
+| GET | `/api/2fa/status` | Check 2FA status |
+| GET | `/api/2fa/setup` | Start 2FA setup (QR code) |
+| POST | `/api/2fa/setup` | Complete 2FA setup |
+| POST | `/api/2fa/disable` | Disable 2FA |
+
+**Rate Limits:**
+- Login: 5 attempts per 15 minutes per IP
+- Log ingestion: 120 requests per 15 minutes per IP
+- Logs API: 100 requests per 15 minutes per IP
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Privacy Monitor System                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────────┐    ┌─────────────────────────────┐    │
+│  │   WPF Desktop App   │    │    Node Update Server       │    │
+│  │   (Privacy Monitor) │    │    (browser-update-server)  │    │
+│  │                     │    │                             │    │
+│  │  • WebView2 tabs    │    │  • Express.js               │    │
+│  │  • Privacy engine   │◄──►│  • REST API                 │    │
+│  │  • Tracker blocking │    │  • Admin panel (2FA)        │    │
+│  │  • Reports          │    │  • Build hosting            │    │
+│  │  • Network monitor  │    │  • Usage analytics          │    │
+│  └─────────────────────┘    └─────────────────────────────┘    │
+│           │                            │                        │
+│           │                            │                        │
+│           ▼                            ▼                        │
+│  ┌─────────────────────┐    ┌─────────────────────────────┐    │
+│  │  Chrome Extension   │    │      Website (static)       │    │
+│  │  (Optional)         │    │      index.html             │    │
+│  │  • Tracker blocking │    │      features.html          │    │
+│  │  • Privacy scores   │    │      download.html          │    │
+│  │  • Cosmetic filter  │    │      admin.html             │    │
+│  └─────────────────────┘    └─────────────────────────────┘    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Data Flow:**
+1. User browses in WPF app or Chrome extension
+2. Privacy engine analyzes requests, blocks trackers, scores pages
+3. Network interceptor logs all requests for inspection
+4. Reports generated (HTML/CSV) for GDPR compliance
+5. Optional: App checks for updates via Node server
+6. Optional: Anonymous usage data sent (if user allows)
 
 ---
 

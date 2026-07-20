@@ -100,7 +100,7 @@ namespace PrivacyMonitor
         }
     }
 
-    public partial class MainWindow : Window
+    public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         private sealed class TaskManagerRow
         {
@@ -1341,7 +1341,7 @@ namespace PrivacyMonitor
             // Close button
             var closeBtn = new Button
             {
-                Content = "\u00D7", FontSize = 12, Width = 18, Height = 18,
+                Content = "\u2715", FontSize = 11, Width = 18, Height = 18,
                 Background = Brushes.Transparent, Foreground = TabInactiveFg,
                 BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
                 VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0),

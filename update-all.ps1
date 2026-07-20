@@ -30,4 +30,4 @@ if (Test-Path $serverPackage) {
 }
 
 Write-Host "=== Update all finished ===" -ForegroundColor Green
-Write-Host "Next: git add/commit/push (GitHub), or .\update-vps.ps1 (VPS)." -ForegroundColor Gray
+Write-Host "Next: git add/commit/push (GitHub)." -ForegroundColor Gray

@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
+using Wpf.Ui.Appearance;
 
 namespace PrivacyMonitor;
 
@@ -159,6 +160,14 @@ public partial class App : Application
             $"pack://application:,,,/PrivacyMonitor;component/Themes/{themeName}.xaml",
             System.UriKind.Absolute);
 
+        // Apply WPF-UI Fluent theme first
+        ApplicationThemeManager.Apply(
+            isDark ? ApplicationTheme.Dark : ApplicationTheme.Light,
+            Wpf.Ui.Controls.WindowBackdropType.Mica,
+            true
+        );
+
+        // Then layer custom theme on top (for unique brushes WPF-UI doesn't provide)
         if (_themeDictionary != null)
         {
             Resources.MergedDictionaries.Remove(_themeDictionary);

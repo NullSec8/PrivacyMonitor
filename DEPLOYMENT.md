@@ -1,8 +1,8 @@
-# Deployment: GitHub + VPS
+# Deployment
 
-## 1. GitHub (first time)
+## GitHub (first time)
 
-From `work` folder:
+From project folder:
 
 ```powershell
 # Initialize (if not already)
@@ -30,38 +30,12 @@ git push
 
 ---
 
-## 2. VPS update
+## Update all (restore & build)
 
-Uses `update-vps.ps1` (SCP to your VPS). Edit the script to choose what to deploy:
-
-- **DeployWebsite** = `true`: uploads `wpf-browser/website/*` to VPS `browser_project/website/`
-- **DeployServer** = `true`: uploads `browser-update-server/server/*` to VPS `browser_project/server/`
-- **DeployBuilds** = `true`: uploads `browser-update-server/builds/*` to VPS `browser_project/builds/`
-
-**Run:**
+Run before committing:
 
 ```powershell
-cd c:\Users\endri\OneDrive\Desktop\work
-.\update-vps.ps1
-```
-
-**VPS details** (in script): user `endri`, host `187.77.71.151`, base path `/home/endri/browser_project`.
-
-After deploying the server, on the VPS run:
-
-```bash
-cd /home/endri/browser_project/server && npm install --omit=dev && sudo systemctl restart browser-update-server
-```
-
----
-
-## 3. Update all (restore & build)
-
-Run before committing or deploying:
-
-```powershell
-cd c:\Users\endri\OneDrive\Desktop\work
 .\update-all.ps1
 ```
 
-This restores .NET and Node packages and builds the WPF app. Optionally run `update-vps.ps1` after to deploy to the VPS.
+This restores .NET and Node packages and builds the WPF app.

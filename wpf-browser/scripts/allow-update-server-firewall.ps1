@@ -1,10 +1,10 @@
 # Add Windows Firewall outbound rule so Privacy Monitor can reach the update server.
-# Allows ONLY: PrivacyMonitor.exe -> 187.77.71.151 port 3000 (TCP).
+# Allows ONLY: PrivacyMonitor.exe -> update server IP port 3000 (TCP).
 # Must run as Administrator.
 
 #Requires -RunAsAdministrator
 $ErrorActionPreference = 'Stop'
-$updateServerIp = "187.77.71.151"
+$updateServerIp = "127.0.0.1"
 $updateServerPort = 3000
 $ruleName = "Privacy Monitor - Update server"
 

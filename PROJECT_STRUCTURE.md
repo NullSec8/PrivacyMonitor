@@ -28,7 +28,7 @@ Canonical layout of the repository and where each piece lives.
 │   ├── ExportBlocklist/        # CLI to export blocklist for chrome-extension
 │   ├── docs/                   # Technical documentation
 │   ├── scripts/                # Helper scripts (firewall, uninstall)
-│   ├── website/                # Canonical website (deploy source for update-vps.ps1)
+│   ├── website/                # Canonical website
 │   │   ├── index.html, download.html, features.html, security.html
 │   │   ├── admin.html, logs.html, setup-2fa.html
 │   │   └── assets/             # styles.css, app.js, logo, screens, build-info.json
@@ -49,7 +49,7 @@ Canonical layout of the repository and where each piece lives.
 │   ├── rules.json, rules-stealth.json, rules-video-ads.json
 │   └── generate-rules.js       # Optional Node; C# export replaces need
 │
-├── browser-update-server/      # Node update server (deploy to VPS)
+├── browser-update-server/      # Node update server
 │   ├── server/
 │   │   ├── server.js           # Express: /api/latest, /api/download, /admin
 │   │   ├── package.json
@@ -60,7 +60,6 @@ Canonical layout of the repository and where each piece lives.
 │   └── guacamole/              # Optional RDP-in-browser (Docker)
 │
 ├── wpf-browser.sln             # Solution file
-├── update-vps.ps1              # Deploy website, server, builds → VPS
 ├── update-all.ps1              # Restore packages and build everything
 ├── README.md                   # Project overview
 ├── PROJECT_STRUCTURE.md        # This file
@@ -74,7 +73,7 @@ Canonical layout of the repository and where each piece lives.
 
 | What | Path | Notes |
 |------|------|--------|
-| **Website (deploy)** | `wpf-browser/website/` | `update-vps.ps1` uploads this folder. |
+| **Website (deploy)** | `wpf-browser/website/` | Static site files. |
 | **Update server** | `browser-update-server/server/` | Node app. `node_modules` excluded from deploy. |
 | **Version manifest** | `browser-update-server/builds/version.json` | Version and download filenames. |
 | **WPF app** | `wpf-browser/` | Build: `dotnet build wpf-browser/PrivacyMonitor.csproj` |
@@ -94,7 +93,5 @@ Canonical layout of the repository and where each piece lives.
 
 | Script | Purpose |
 |--------|--------|
-| `update-vps.ps1` | Upload website, server, builds to VPS; fix permissions; restart Node. |
 | `update-all.ps1` | Restore NuGet/Node and build (run from repo root). |
 | `wpf-browser/publish.ps1` | Build single-file EXE; copy to `wpf-browser/website/`. |
-| `browser-update-server/setup-ssh-key.ps1` | One-time: SSH key setup for passwordless deploy. |

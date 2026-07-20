@@ -56,7 +56,7 @@ Concrete improvements to harden the browser’s privacy and security.
 
 ## Security (app and updates)
 
-- **HTTPS for update server** – Use Certbot on VPS, set `UpdateService.BaseUrl` to `https://...`.
+- **HTTPS for update server** – Use Certbot, set `UpdateService.BaseUrl` to `https://...`.
 - **Code signing** – Sign the EXE so SmartScreen doesn’t warn; see `SIGNING.md`.
 - **Configurable update URL** – Allow power users to point to a custom update server (e.g. enterprise).
 

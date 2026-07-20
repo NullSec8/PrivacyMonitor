@@ -62,9 +62,9 @@
     <SolidColorBrush x:Key="DangerBrush" Color="#B91C1C"/>
     <SolidColorBrush x:Key="DangerButtonBackground" Color="#FEE2E2"/>
     <SolidColorBrush x:Key="DangerButtonForeground" Color="#B91C1C"/>
-    <SolidColorBrush x:Key="HighRiskWarningBackground" Color="#450A0A"/>
-    <SolidColorBrush x:Key="HighRiskWarningBorder" Color="#B91C1C"/>
-    <SolidColorBrush x:Key="HighRiskWarningText" Color="#FEE2E2"/>
+    <SolidColorBrush x:Key="HighRiskWarningBackground" Color="#FEF2F2"/>
+    <SolidColorBrush x:Key="HighRiskWarningBorder" Color="#EF4444"/>
+    <SolidColorBrush x:Key="HighRiskWarningText" Color="#991B1B"/>
     <SolidColorBrush x:Key="CrashOverlayBackground" Color="#F8FAFC"/>
     <SolidColorBrush x:Key="CrashOverlayTitle" Color="#0F172A"/>
     <SolidColorBrush x:Key="CrashOverlaySubtitle" Color="#334155"/>
@@ -121,5 +121,12 @@
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="Foreground" Value="{StaticResource TextMuted}"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style x:Key="TextSectionHeader" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+        <Setter Property="Margin" Value="0,0,0,10"/>
     </Style>
 </ResourceDictionary>
